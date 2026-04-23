@@ -1,0 +1,30 @@
+\begin{table*}[t]
+\centering
+\caption{Definition of the peak-strength benchmark protocols used in Table~\ref{tab:main_results}. The split is always created before fitting scalers, target transformations, model hyperparameters, or stress-path reference scales.}
+\label{tab:protocols}
+\footnotesize
+\setlength{\tabcolsep}{3.2pt}
+\begin{tabular}{p{0.15\textwidth}p{0.18\textwidth}p{0.20\textwidth}p{0.18\textwidth}p{0.13\textwidth}}
+\toprule
+Protocol label & Data unit and size & Inputs and target & Split rule & Purpose \\
+\midrule
+RockMB-2025, paper 70/30 &
+One row is one published direct-shear peak-strength record; $N=288$. &
+Inputs are normal stress, UCS, Young's modulus, JRC, and specimen length. The target is peak shear strength in MPa. &
+The locally reconstructed paper protocol uses a deterministic 70/30 random split with seed 42, giving 201 training samples and 87 held-out test samples. All preprocessing statistics are fitted on the 201 training samples only. &
+Small-data interpolation benchmark matching the reported paper-style split. \\
+\midrule
+G5 public curves, random 75/25 &
+One row is the peak extracted from one public shear stress--displacement curve; $N=60$ curves from 3 joint profiles, 4 immersion durations, and 5 normal stresses. &
+Inputs are normal stress, immersion duration, and one-hot joint-profile indicators. The target is the peak shear stress extracted from the measured curve. &
+A deterministic random 75/25 split with seed 42 is used, giving 45 training curves and 15 held-out test curves. No points from the test curves are used for fitting preprocessing or model selection. &
+Within-distribution interpolation over observed profiles and water-weakening conditions. \\
+\midrule
+G5 public curves, leave-one-profile-out &
+The same $N=60$ extracted curve peaks are used, but the group label is the joint profile: JA, JB, or JC. &
+Inputs and target are identical to the G5 random protocol. Profile indicators are retained, but an entire profile is absent from training in each fold. &
+Leave-one-group-out validation over the three profiles. Each fold trains on two profiles, i.e., 40 curves, and tests on the held-out profile, i.e., 20 curves. Reported values are mean metrics over the three held-out profiles. &
+Source-shift test for profile-level generalization rather than random interpolation. \\
+\bottomrule
+\end{tabular}
+\end{table*}

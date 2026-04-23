@@ -1,0 +1,236 @@
+GeoSPIN detailed framework blueprint
+====================================
+
+Purpose of the figure
+---------------------
+
+This framework figure should explain how GeoSPIN predicts peak shear strength
+from a static rock-joint context and a queried normal stress. The key message is:
+
+  static context is encoded once,
+  stress-dependent physics is computed online along the stress path,
+  a decoder predicts a positive strength-accumulation rate,
+  quadrature integrates this rate to obtain peak shear strength,
+  zero boundary and monotonicity are guaranteed by construction.
+
+
+Recommended figure layout
+-------------------------
+
+Use a left-to-right layout with five blocks:
+
+  [A] Inputs and split
+      |
+      v
+  [B] Static-context encoder
+      |
+      v
+  [C] Stress-path quadrature and online physics module
+      |
+      v
+  [D] Positive-rate decoder
+      |
+      v
+  [E] Integral prediction, guarantees, and training losses
+
+
+Full ASCII framework
+--------------------
+
+
+  +----------------------------------------------------------------------------------+
+  |                                  [A] INPUT SPLIT                                  |
+  +----------------------------------------------------------------------------------+
+
+      Static context c
+      --------------------------------------------------------------------------
+      c = [JRC, JCS or UCS, phi_b, specimen_length, Young's modulus,
+           lithology/source indicators if available, other static descriptors]
+
+      Queried normal stress
+      --------------------------------------------------------------------------
+      sigma_n
+
+      Important design rule:
+      sigma-dependent engineered variables are NOT concatenated as fixed inputs
+      to the encoder. They are recomputed later at each quadrature node.
+
+
+        c                                                    sigma_n
+        |                                                       |
+        v                                                       v
+  +-----------------------------+                  +-----------------------------+
+  | [B] STATIC-CONTEXT ENCODER  |                  | [C1] STRESS COORDINATE     |
+  +-----------------------------+                  +-----------------------------+
+  |                             |                  |                             |
+  |  Normalize static features  |                  | s = log(1 + sigma_n /      |
+  |  with train-fold statistics |                  |             sigma_ref)     |
+  |                             |                  |                             |
+  |  Periodic / numerical       |                  | sigma_ref = median positive |
+  |  embeddings for continuous  |                  | normal stress in training   |
+  |  context variables          |                  | partition only              |
+  |                             |                  |                             |
+  |  Residual MLP encoder       |                  +-------------+---------------+
+  |                             |                                |
+  |  z_c = E_phi(c)             |                                v
+  |                             |                  +-----------------------------+
+  +-------------+---------------+                  | [C2] QUADRATURE NODES      |
+                |                                  +-----------------------------+
+                |                                  |                             |
+                |                                  | choose K nodes on [0, s]    |
+                |                                  |                             |
+                |                                  | u_k = 0.5 * s * (x_k + 1)  |
+                |                                  | omega_k = quadrature weight |
+                |                                  |                             |
+                |                                  | k = 1, ..., K               |
+                |                                  +-------------+---------------+
+                |                                                |
+                |                                                v
+                |                                  +-----------------------------+
+                |                                  | [C3] ONLINE PHYSICS MODULE |
+                |                                  +-----------------------------+
+                |                                  | for each node u_k:          |
+                |                                  |                             |
+                |                                  | sigma_k = sigma_ref *       |
+                |                                  |           (exp(u_k) - 1)    |
+                |                                  |                             |
+                |                                  | q_k = Q(sigma_k, c)         |
+                |                                  |                             |
+                |                                  | q_k may include:            |
+                |                                  | - sigma_k / JCS             |
+                |                                  | - log(JCS / sigma_k)        |
+                |                                  | - Barton-Bandis tau_BB      |
+                |                                  | - trust weight w_BB         |
+                |                                  | - online friction terms     |
+                |                                  |                             |
+                |                                  | q_k is recomputed at the    |
+                |                                  | current stress node, not    |
+                |                                  | stored as a static feature. |
+                |                                  +-------------+---------------+
+                |                                                |
+                |                                                |
+                +-------------------------------+----------------+
+                                                |
+                                                v
+  +----------------------------------------------------------------------------------+
+  |                              [D] POSITIVE-RATE DECODER                            |
+  +----------------------------------------------------------------------------------+
+  |                                                                                  |
+  |  Node-wise decoder input at quadrature node k:                                    |
+  |                                                                                  |
+  |      d_k = concat( z_c, node_embedding(u_k), q_k )                                |
+  |                                                                                  |
+  |  Decoder network:                                                                 |
+  |                                                                                  |
+  |      a_k = C_psi(d_k)                                                            |
+  |                                                                                  |
+  |  Positive rate head:                                                              |
+  |                                                                                  |
+  |      r_k = softplus(a_k) + epsilon                                                |
+  |                                                                                  |
+  |  Interpretation:                                                                  |
+  |                                                                                  |
+  |      r_k approximates d tau_p / d s at stress-path node u_k.                      |
+  |      Because r_k is positive, the predicted peak strength can only accumulate      |
+  |      as the stress-path coordinate increases.                                     |
+  |                                                                                  |
+  +--------------------------------------+-------------------------------------------+
+                                         |
+                                         v
+  +----------------------------------------------------------------------------------+
+  |                        [E] QUADRATURE INTEGRAL PREDICTION                         |
+  +----------------------------------------------------------------------------------+
+  |                                                                                  |
+  |  Peak shear-strength prediction:                                                  |
+  |                                                                                  |
+  |      tau_hat_p(s, c) = (s / 2) * sum_{k=1}^{K} omega_k * r_k                      |
+  |                                                                                  |
+  |  Equivalent continuous view:                                                      |
+  |                                                                                  |
+  |      tau_hat_p(s, c) = integral from 0 to s of r_psi(u, c, Q(u,c)) du             |
+  |                                                                                  |
+  |  Output is converted/reported in MPa.                                             |
+  |                                                                                  |
+  +-------------------------+-------------------------+------------------------------+
+                            |                         |
+                            v                         v
+  +--------------------------------------+   +---------------------------------------+
+  | [E1] HARD PHYSICAL GUARANTEES        |   | [E2] TRAINING OBJECTIVES             |
+  +--------------------------------------+   +---------------------------------------+
+  |                                      |   |                                       |
+  | Zero-stress boundary                 |   | Data loss                             |
+  |                                      |   |                                       |
+  |   tau_hat_p(0,c) = 0                 |   |   Huber(asinh(tau_hat_p),             |
+  |                                      |   |         asinh(tau_p))                 |
+  | because the integral interval has    |   |                                       |
+  | zero length when s = 0.              |   | Trusted-region Barton-Bandis prior    |
+  |                                      |   |                                       |
+  | Fixed-context monotonicity           |   |   w_BB * Huber(tau_hat_p, tau_BB)     |
+  |                                      |   |                                       |
+  |   d tau_hat_p / d sigma_n >= 0       |   | where w_BB is active only in the       |
+  |                                      |   | trusted normal-stress/JCS regime.      |
+  | because r_k > 0 and                  |   |                                       |
+  | ds/dsigma_n > 0.                    |   | Optional upper-bound or curve losses   |
+  |                                      |   | are diagnostic/ablation terms, not     |
+  | Nonnegative prediction               |   | the source of monotonicity.            |
+  |                                      |   |                                       |
+  |   tau_hat_p >= 0                     |   +---------------------------------------+
+  |                                      |
+  +--------------------------------------+
+
+
+Optional local-curve extension
+------------------------------
+
+If the framework figure also wants to mention local full-curve reconstruction,
+add a small dashed box after z_c and tau_hat_p:
+
+  +---------------------------------------------------------------+
+  | Optional local curve head                                     |
+  +---------------------------------------------------------------+
+  |                                                               |
+  | Inputs: z_c, sigma_n, shear displacement x                    |
+  |                                                               |
+  | Outputs:                                                      |
+  |   tau_hat(x; sigma_n, c)          shear-stress curve           |
+  |   d_hat(x; sigma_n, c)            deformation/dilation proxy   |
+  |                                                               |
+  | Used only for local monotone direct-shear records.             |
+  | Not used to claim cyclic unloading or general constitutive     |
+  | hysteresis.                                                   |
+  |                                                               |
+  +---------------------------------------------------------------+
+
+
+What to remove from the current cluttered figure
+------------------------------------------------
+
+1. Remove decorative engineering icons unless they encode a specific output.
+   They make the figure look busy without explaining the algorithm.
+
+2. Do not emphasize "h(u_k) -> h(u_{k+1}) evolution" unless the final model
+   explicitly keeps a neural ODE hidden-state solver. For the retained GeoSPIN
+   integral model, the central object is the positive rate r_k, not an evolving
+   latent ODE state.
+
+3. Do not show sigma-dependent physics features entering the static encoder.
+   That would contradict the model design. They should enter through the online
+   physics module at each quadrature node.
+
+4. Keep the guarantee box close to the integral formula. The guarantees come
+   from the integral lower limit and positive rate, not from a post-hoc loss.
+
+
+Suggested paper caption
+-----------------------
+
+Overview of GeoSPIN. Static rock-joint descriptors are encoded once by a
+context encoder, while the queried normal stress is mapped to a dimensionless
+stress-path coordinate. GeoSPIN samples quadrature nodes along this path and
+recomputes stress-dependent physics features at each node. A positive-rate
+decoder predicts the local strength accumulation rate, and numerical quadrature
+integrates the rate from zero stress to the target stress. The zero-stress
+boundary, nonnegative prediction, and fixed-context monotonicity follow from
+the integral form and the positive rate parameterization, rather than from
+batch-sorted penalty losses.
+

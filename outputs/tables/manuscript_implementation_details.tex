@@ -1,0 +1,47 @@
+\begin{table*}[t]
+\centering
+\caption{Implementation details for Table~\ref{tab:main_results}. All methods use the same train/test indices within a protocol. Feature scalers and stress reference values are fitted only on the training partition.}
+\label{tab:implementation}
+\scriptsize
+\setlength{\tabcolsep}{3.0pt}
+\begin{tabular}{p{0.105\textwidth}p{0.285\textwidth}p{0.255\textwidth}p{0.245\textwidth}}
+\toprule
+Method & Architecture & Training hyperparameters & Preprocessing and reporting \\
+\midrule
+GeoSPIN &
+Residual periodic monotone stress-path integral network; periodic context embedding dimension 16 with 16 frequencies; hidden width 96; two residual encoder blocks; two positive integrand branches with nonnegative gated residual; 16 midpoint quadrature nodes. &
+AdamW, learning rate $2\times10^{-3}$, weight decay $10^{-4}$, 220 epochs, Huber loss $\delta=0.2$ on asinh stress, gradient clipping 1.0; $\sigma_{\rm ref}$ is the median positive training normal stress. &
+Normal stress is the queried path variable. Static context is standardized with training statistics. Predictions are accumulated in MPa; metrics use MPa-scale predictions. \\
+\midrule
+FTTransformer &
+Continuous-feature tokenization with token width 32, one class token, two transformer encoder layers, four heads, GELU, pre-normalization, dropout 0.05. &
+AdamW, learning rate $2\times10^{-3}$, weight decay $10^{-4}$, 180 epochs, Huber loss $\delta=0.2$, gradient clipping 1.0. &
+StandardScaler on training features; target is $\operatorname{asinh}(\tau)$ during training and inverted by $\sinh(\cdot)$; negative predictions are clipped to zero. \\
+\midrule
+RealMLP &
+Residual MLP with hidden width 128, three residual blocks, layer normalization, GELU, and dropout 0.05. &
+Same optimizer, learning rate, epoch count, Huber loss, and clipping as FTTransformer. &
+Same StandardScaler and asinh-target pipeline as FTTransformer. \\
+\midrule
+Periodic MLP &
+Periodic numerical embeddings with dimension 16, 16 frequencies, initialization scale 0.01, followed by a residual MLP of width 128. &
+Same optimizer, learning rate, epoch count, Huber loss, and clipping as FTTransformer. &
+Same StandardScaler and asinh-target pipeline as FTTransformer. \\
+\midrule
+KANLite &
+KAN-inspired network with two Gaussian-basis KAN layers, 8 centers in $[-2.5,2.5]$, learnable basis width, and hidden width 64. &
+Same optimizer, learning rate, epoch count, Huber loss, and clipping as FTTransformer. &
+Same StandardScaler and asinh-target pipeline as FTTransformer. \\
+\midrule
+TabM &
+Parameter-efficient ensemble MLP with $k=16$ members and one scalar regression output. &
+AdamW, learning rate $2\times10^{-3}$, weight decay $10^{-4}$, Huber loss $\delta=0.2$; shared script uses 180 epochs; RockMB-specific run allows 250 epochs, batch size 64, patience 30. &
+Same StandardScaler and asinh-target pipeline; ensemble members are averaged before inverse transformation. \\
+\midrule
+CatBoost &
+CatBoostRegressor with RMSE loss. G5 run uses depth 4 and 300 trees. RockMB paper split uses tuned depth 5 and 174 trees. &
+G5: learning rate 0.035, $L_2$ leaf regularization 3.0. RockMB: learning rate 0.1950, $L_2$ leaf regularization 2.0933, subsample 0.6698. &
+Same train/test partitions and raw numerical feature columns; metrics are computed in MPa with nonnegative clipping. \\
+\bottomrule
+\end{tabular}
+\end{table*}

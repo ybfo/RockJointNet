@@ -1,0 +1,104 @@
+GeoSPIN node-only framework
+===========================
+
+
+INPUTS
+------
+
+  JRC ----\
+  JCS -----\
+  UCS ------\
+  phi_b -----\
+  L ----------> c ----> norm ----> emb ----> E_phi ----> z_c ----------------------\
+  E ---------/                                                                    |
+  src ------/                                                                     |
+                                                                                concat
+  sigma_n ----> s ----> grid ----> u_k ----> sigma_k ----> Q ----> q_k ------------/
+                 |                         ^             ^       |
+                 |                         |             |       |
+                 |                         |             c       |
+                 |                         |                     |
+                 |                         sigma_ref             |
+                 |                                               |
+                 |                                               v
+                 |                                      tau_BB ----> Huber ----\
+                 |                                      w_BB ------> weight ----> L_BB
+                 |                                                             /
+                 |                                                            /
+                 v                                                           /
+              omega_k                                                       /
+                 |                                                         /
+                 v                                                        /
+  z_c ------------------------------\                                     /
+  u_k -------------------------------> concat ----> C_psi ----> a_k ----> sp ----> r_k ----\
+  q_k ------------------------------/                                                    |
+                                                                                         v
+                                                                                  omega_k r_k
+                                                                                         |
+                                                                                         v
+                                                                                       sum
+                                                                                         |
+                                                                                         v
+                                                                                         *
+                                                                                         ^
+                                                                                         |
+                                                                                         s
+                                                                                         |
+                                                                                         v
+                                                                                   tau_hat_p
+
+
+DATA LOSS
+---------
+
+  tau_p ----> asinh ----------------\
+                                  Huber ----> L_data
+  tau_hat_p ----> asinh ------------/
+
+
+TRUSTED PRIOR
+-------------
+
+  tau_hat_p ----------------------\
+                                   Huber ----> weight ----> L_BB
+  tau_BB -------------------------/              ^
+                                                 |
+                                               w_BB
+
+
+TOTAL LOSS
+----------
+
+  L_data ----\
+  L_BB -------> L_total ----> AdamW ----> theta
+  L_curve ---/
+
+
+HARD CHECKS
+-----------
+
+  tau_hat_p ----> tau0
+  tau_hat_p ----> pos
+  tau_hat_p ----> mono
+  tau_hat_p ----> sweep
+
+
+OPTIONAL CURVE HEAD
+-------------------
+
+  z_c ----------\
+  sigma_n -------> H_chi ----> tau_hat(x)
+  x ------------/       \
+                         ----> d_hat(x)
+
+  tau_hat(x) ----> L_curve
+  d_hat(x) ------> L_curve
+
+
+ONE-LINE VERSION
+----------------
+
+  c -> E_phi -> z_c \
+                    concat -> C_psi -> sp -> r_k -> sum -> tau_hat_p
+  sigma_n -> s -> u_k -> Q -> q_k /
+

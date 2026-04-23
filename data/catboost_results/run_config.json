@@ -1,0 +1,5 @@
+{
+  "dataset": "E:\\xiongyuhu\\stress_prediction\\RockJointNet_external_compare\\datasets\\g5pf6k9n2w_v1_parsed\\shear_curve_peaks.csv",
+  "model": "CatBoostRegressor",
+  "protocols": 3
+}

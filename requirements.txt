@@ -1,0 +1,8 @@
+matplotlib
+numpy
+pandas
+tabulate
+
+# Optional only for historical retraining scripts under scripts/source_generators.
+scikit-learn
+torch

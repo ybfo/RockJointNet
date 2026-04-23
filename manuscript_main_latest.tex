@@ -1,0 +1,539 @@
+\documentclass[journal]{IEEEtran}
+\usepackage{amsmath,amssymb,amsfonts,amsthm}
+\usepackage{graphicx,booktabs,multirow,cite,url,xcolor,siunitx,stfloats,array}
+\usepackage{algorithm,algorithmic}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}{Lemma}
+\newtheorem{definition}{Definition}
+\newtheorem{assumption}{Assumption}
+\newtheorem{remark}{Remark}
+
+\title{GeoSPIN: Continuous Stress-Path Integral Learning for Physics-Regularized Rock-Joint Shear Prediction}
+\author{Anonymous Authors\thanks{Prepared for submission to IEEE Transactions on Neural Networks and Learning Systems.}}
+\markboth{IEEE Transactions on Neural Networks and Learning Systems,~Vol.~XX, No.~X, 2026}{Anonymous \MakeLowercase{\textit{et al.}}: GeoSPIN}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Rock-joint shear prediction is a small-data scientific machine-learning problem where point accuracy alone is not enough: a predictor must remain physically meaningful when the same joint context is queried along a counterfactual normal-stress path. Existing neural predictors typically treat normal stress as an ordinary tabular covariate, inject Barton--Bandis quantities as fixed engineered features, or enforce monotonicity by sorting unrelated samples inside a mini-batch. These designs can obtain attractive random-split scores while violating the conditional stress-path structure of rock-joint mechanics. We propose \textbf{GeoSPIN}, a geomechanical stress-path integral network that models peak shear strength as the accumulation of a positive neural rate over a dimensionless normal-stress coordinate. GeoSPIN separates static joint context from online stress-dependent physics features, hard-encodes the zero-stress boundary and fixed-context monotonicity, and uses Barton--Bandis only as a trusted-region empirical regularizer rather than a global target. For local direct-shear records, GeoSPIN further reconstructs full shear-displacement and dilation-proxy curves against a calibrated Barton--Bandis curve law (C-BB). Experiments on reproduced public rock-joint benchmarks and local full-curve data show that GeoSPIN improves RMSE over recent neural tabular baselines, yields zero fixed-context monotonic violations in tested sweeps, and reconstructs local shear and deformation curves more accurately than C-BB. The results establish continuous stress-path integral learning as a stable, physically constrained alternative to penalty-heavy rock-joint PINNs.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Rock joints, shear strength, scientific machine learning, monotone neural networks, physics-regularized learning, Barton--Bandis model.
+\end{IEEEkeywords}
+
+\section{Introduction}
+The ability to predict rock-joint shear behavior is essential for discontinuity-controlled rock engineering, including slope stability, underground excavation, rock foundation design, and hydraulic aperture assessment. The difficulty is that rock joints are neither homogeneous intact materials nor arbitrary tabular observations. Their shear response is governed by a coupled interaction among normal stress, roughness, wall strength, basic friction, specimen size, and loading history. In practice, engineers often query the same joint description under multiple possible normal stresses. Such a query is not a random test point; it is a counterfactual stress path. A machine-learning model that performs well on a held-out table but gives a decreasing peak strength when normal stress increases for the same joint context is not a valid constitutive predictor.
+
+Classical rock mechanics has long recognized the path-dependent and context-dependent nature of joint shear. Patton's asperity interpretation and the Barton--Bandis family connect peak shear strength and deformation to normal stress, joint roughness coefficient (JRC), joint wall compressive strength (JCS), and basic friction angle \cite{patton1966multiple,barton1973review,barton1977shear,bandis1983fundamentals,barton1985strength}. These models remain influential because they encode interpretable mechanics. However, they are empirical, calibrated under finite regimes, and sensitive to how roughness, strength, and scale are measured. Treating Barton--Bandis as a universal neural label can therefore be as problematic as ignoring it. A credible learning model must use empirical mechanics where it is trusted while avoiding global over-regularization.
+
+Recent scientific machine learning provides a useful methodological lens. Physics-informed neural networks, variational PINNs, Bayesian PINNs, neural ODEs, and neural operators show that data-driven models become more reliable when physical structure is incorporated into the learning problem \cite{lagaris1998artificial,raissi2019physics,sirignano2018dgm,weinan2018deep,han2018solving,karniadakis2021physics,lu2021deepxde,lu2021deeponet,pang2019fpinns,kharazmi2021hpvpinns,chen2018neural,li2021fourier,kovachki2023neural}. Yet the rock-joint peak-strength task is not a standard PDE problem. The available public data are mostly sparse tables, and local files may contain short direct-shear curves rather than dense fields with a known governing residual. Consequently, calling a model a PINN because it contains many physics-inspired losses is misleading unless the losses are mathematically meaningful and active on the correct domain.
+
+The main failure mode in existing penalty-heavy formulations is that constraints are often imposed on arbitrary rows rather than on physical paths. A batch-sort monotonicity loss sorts a mini-batch by normal stress and penalizes decreases in predicted shear strength. This is meaningful only if all sorted samples share the same JRC, JCS, friction angle, specimen length, and source conditions, which is rarely true. A smoothness loss based on finite differences across sorted samples suffers from the same defect. Similarly, if positivity and zero-stress boundary conditions are already guaranteed by the output parameterization, adding separate loss terms makes the objective appear more physical without adding content. These issues motivate a model in which the most basic constraints are structural rather than penalized.
+
+We introduce \textbf{GeoSPIN}, a Geomechanical Stress-Path Integral Network. The central idea is to treat normal stress as a continuous path coordinate. For a fixed static joint context, GeoSPIN starts from zero stress and integrates a positive neural rate over a dimensionless logarithmic stress variable. All stress-dependent physics features, including stress ratios and Barton--Bandis estimates, are computed online at integration nodes rather than encoded as static inputs. The zero-stress boundary, nonnegative prediction, and fixed-context monotonicity therefore follow from the architecture. Barton--Bandis is used only through a trusted-region regularizer and a calibrated direct-shear curve baseline named C-BB.
+
+This article is organized in the same spirit as high-quality TNNLS physics-informed studies: it first states the engineering and learning problem, then formulates a dimensionless path model, gives the forward and curve-reconstruction algorithms, provides theoretical analysis, and finally validates not only scalar prediction accuracy but also solution fields, derivative fields, physical constraint diagnostics, and full direct-shear curves. The main contributions are as follows. First, we reformulate rock-joint peak-strength prediction as continuous fixed-context stress-path learning. Second, we derive a positive neural integral architecture with exact boundary and monotonicity guarantees. Third, we introduce trusted-region Barton--Bandis regularization and a calibrated empirical curve reference, C-BB. Fourth, we provide a full evaluation protocol against modern tabular neural baselines and local direct-shear curve data.
+
+\section{Related Work}
+\subsection{Rock-Joint Shear Modeling}
+Empirical and semi-empirical rock-joint models provide the mechanical vocabulary for this work. Early joint shear theories describe how dilation and asperity sliding increase apparent friction, while Barton--Bandis relates peak strength and joint deformation to JRC, JCS, normal stress, and basic friction angle \cite{barton1973review,barton1977shear,bandis1983fundamentals,barton1985strength}. Later studies on three-dimensional roughness and scale effects show that surface morphology and measurement protocols strongly affect strength estimates \cite{grasselli2003constitutive,tatone2010comparison}. Broader rock-mechanics models, including Hoek--Brown strength and discrete-element methods, further emphasize the dependence of response on material state and loading path \cite{cundall1979discrete,hoek1997practical,jaeger2007fundamentals}. GeoSPIN follows this tradition by preserving the role of stress paths while avoiding the assumption that an empirical formula is exact everywhere.
+
+\subsection{Physics-Informed and Structure-Preserving Learning}
+PINNs and related methods have been successful for forward and inverse PDE problems because the governing equation can be evaluated at collocation points \cite{raissi2019physics,karniadakis2021physics,lu2021deepxde}. Nondimensionalization is often crucial in those settings because dimensional coefficients can make optimization ill-conditioned. The TNNLS beam-system study that motivates our writing style follows this pattern: it first shows difficulty with dimensional PDEs, then introduces nondimensional PINNs, then validates forward and inverse problems through solution fields, error fields, derived quantities, and convergence checks. GeoSPIN adapts the same reasoning to geomechanics, but the governing object is a stress path rather than a PDE residual. The exact constraints are encoded structurally, while empirical mechanics enters as trusted regularization.
+
+\subsection{Modern Tabular Learning and Reliability}
+Small tabular datasets are now served by strong baselines, including random forests, XGBoost, CatBoost, FTTransformer, RealMLP, KAN-like networks, TabM, and TabPFN-style foundation models \cite{breiman2001random,chen2016xgboost,prokhorenkova2018catboost,gorishniy2021revisiting,hollmann2023tabpfn,liu2024kan,vaswani2017attention}. These methods can interpolate well, but they usually do not distinguish path variables from static context. Reliability tools such as deep ensembles, dropout uncertainty, calibration, and heteroscedastic likelihoods are important for small-data engineering prediction \cite{lakshminarayanan2017simple,gal2016dropout,guo2017calibration,kuleshov2018accurate,kendall2017uncertainties,bishop1994mixture,kennedy2001bayesian,sacks1989design}. GeoSPIN is compatible with these uncertainty extensions, but this paper focuses on the structural validity and predictive accuracy of the mean model.
+
+\section{Problem Formulation}
+Let $\mathbf{c}\in\mathbb{R}^{d_c}$ denote a static rock-joint context. The vector $\mathbf{c}$ contains stress-independent variables such as JRC, JCS, basic friction angle, specimen length, uniaxial compressive strength, elastic modulus, lithology or source indicators when available, and other fixed descriptors. Let $\sigma\ge0$ denote the queried normal stress, and let $\tau_p(\sigma,\mathbf{c})$ be the peak shear strength. The forward prediction problem is to estimate $\tau_p$ for unseen samples while producing physically valid counterfactual responses for fixed $\mathbf{c}$.
+
+Stress-dependent engineered features are separated from static context. We write them as $\mathbf{q}(s,\mathbf{c})$, where $s$ is the stress-path coordinate. The vector $\mathbf{q}$ can include $\sigma/\mathrm{JCS}$, safeguarded $\log(\mathrm{JCS}/\sigma)$, Barton--Bandis friction components, and the empirical peak estimate $\tau_{\rm BB}$. These quantities are functions of the current stress node. They are therefore recomputed online during integration, not stored as fixed encoder inputs.
+
+The dimensionless stress coordinate is
+\begin{equation}
+s=\log\left(1+\frac{\sigma}{\sigma_{\rm ref}}\right),
+\label{eq:sdef}
+\end{equation}
+where $\sigma_{\rm ref}>0$ is a robust scale estimated from the training stresses. Its inverse is
+\begin{equation}
+\sigma=\sigma_{\rm ref}\left(\exp(s)-1\right).
+\label{eq:sinv}
+\end{equation}
+The logarithmic map has two purposes. It nondimensionalizes stress and compresses the high-stress range, and it preserves the order of normal stress so that monotonicity in $s$ implies monotonicity in $\sigma$.
+
+For local direct-shear records, the task is expanded from peak prediction to full curve reconstruction. Given shear displacement $x$, applied normal stress $\sigma_n$, and context $\mathbf{c}$, we predict shear stress $\tau(x,\sigma_n,\mathbf{c})$ and a dilation or normal-deformation proxy $d(x,\sigma_n,\mathbf{c})$. This curve problem is reported separately because public peak-strength datasets do not contain synchronized displacement and dilation histories.
+
+\section{Methodology}
+\subsection{Motivation and Overview}
+GeoSPIN treats peak shear strength as the endpoint of a continuous stress-path flow. Instead of learning an unconstrained map from a table row to a scalar, the model learns a nonnegative rate of strength accumulation. This is analogous to replacing a discrete sequence of unrelated adaptation steps with a continuous trajectory: the model has an internal coordinate, a velocity-like rate, and a path integral that determines the final output. The difference is that the trajectory here is a physical normal-stress path rather than a distributional domain path.
+
+The model has four components. The context encoder maps static descriptors to an initial latent state. The stress-path dynamics update the latent state along $s$. The positive rate head produces the derivative of peak strength with respect to $s$. The trusted empirical regularizer uses Barton--Bandis only in a predefined region. The training procedure is shown in Algorithm~\ref{alg:geospin_train}.
+
+\subsection{Stress-Path Integral Architecture}
+The latent initial condition is
+\begin{equation}
+\mathbf{h}(0)=E_{\phi}(\mathbf{c}),
+\label{eq:h0}
+\end{equation}
+where $E_{\phi}$ is a neural encoder and $\phi$ denotes its parameters. The latent state evolves according to
+\begin{equation}
+\frac{d\mathbf{h}}{ds}=F_{\theta}\left(\mathbf{h}(s),s,\mathbf{c},\mathbf{q}(s,\mathbf{c})\right),
+\label{eq:latent}
+\end{equation}
+where $F_{\theta}$ is a neural vector field. The peak-strength rate is
+\begin{equation}
+r_{\psi}(s,\mathbf{c})=\operatorname{softplus}\left(G_{\psi}(\mathbf{h}(s),s,\mathbf{c},\mathbf{q}(s,\mathbf{c}))\right)+\varepsilon,
+\label{eq:rate}
+\end{equation}
+where $G_{\psi}$ is a scalar neural head, $\operatorname{softplus}(z)=\log(1+\exp(z))$, and $\varepsilon>0$ is a numerical floor. The predicted peak shear strength is
+\begin{equation}
+\widehat{\tau}_p(s,\mathbf{c})=\int_0^s r_{\psi}(u,\mathbf{c})du.
+\label{eq:integral}
+\end{equation}
+Numerically, Eq.~\eqref{eq:integral} is evaluated using fixed Gauss--Legendre quadrature or fourth-order Runge--Kutta integration. The model can be simplified to a direct monotone integral MLP by removing Eq.~\eqref{eq:latent}; repeated validation determines whether the latent dynamics are retained.
+
+\subsection{Trusted-Region Barton--Bandis Prior}
+Let $\tau_{\rm BB}(\sigma,
+\mathbf{c})$ denote the Barton--Bandis peak estimate. GeoSPIN uses this empirical quantity through a trust weight
+\begin{equation}
+w_{\rm BB}(\sigma,\mathbf{c})=\mathbb{I}[\sigma\le\sigma_{\rm trust}]\mathbb{I}[\sigma/\mathrm{JCS}\le\xi],
+\label{eq:wbb}
+\end{equation}
+where $\sigma_{\rm trust}$ and $\xi$ define the trusted region. A soft alternative is
+\begin{equation}
+w_{\rm BB}^{\rm soft}=\exp[-\alpha\max(0,\sigma/\mathrm{JCS}-\xi)],
+\label{eq:wbbsoft}
+\end{equation}
+where $\alpha>0$ is a decay parameter. The regularization loss is
+\begin{equation}
+\mathcal{L}_{\rm BB}=\frac{1}{N}\sum_{i=1}^{N}w_{{\rm BB},i}\rho_{\delta}(\widehat{\tau}_{p,i}-\tau_{{\rm BB},i}),
+\label{eq:lbb}
+\end{equation}
+where $\rho_{\delta}$ is the Huber loss. This formulation prevents Barton--Bandis from becoming an all-domain label.
+
+\subsection{Training Objective}
+The supervised data loss is computed on a robust target scale:
+\begin{equation}
+\mathcal{L}_{\rm data}=\frac{1}{N}\sum_{i=1}^{N}\rho_{\delta}\left(\operatorname{asinh}(\widehat{\tau}_{p,i})-\operatorname{asinh}(\tau_{p,i})\right).
+\label{eq:ldata}
+\end{equation}
+Curvature is regularized on fixed-context counterfactual sweeps:
+\begin{equation}
+\mathcal{L}_{\rm curv}=\frac{1}{M}\sum_{j=1}^{M}\left(\frac{\partial^2\widehat{\tau}_p(s_j,\mathbf{c}_j)}{\partial s^2}\right)^2.
+\label{eq:lcurv}
+\end{equation}
+The total objective is
+\begin{equation}
+\mathcal{L}=\lambda_d\mathcal{L}_{\rm data}+\lambda_b\mathcal{L}_{\rm BB}+\lambda_c\mathcal{L}_{\rm curv}+\lambda_w\|\Theta\|_2^2.
+\label{eq:ltotal}
+\end{equation}
+No positivity loss, boundary loss, or batch-sort monotonicity loss is included because those properties are either structural or physically ill-defined across unrelated samples.
+
+\begin{algorithm}[t]
+\caption{GeoSPIN Peak-Strength Training}
+\label{alg:geospin_train}
+\begin{algorithmic}[1]
+\REQUIRE training samples $(\mathbf{c}_i,\sigma_i,\tau_{p,i})$, stress scale $\sigma_{\rm ref}$
+\STATE Initialize $E_{\phi}$, $F_{\theta}$, and $G_{\psi}$.
+\FOR{each epoch}
+\STATE Sample a mini-batch and compute $s_i=\log(1+\sigma_i/\sigma_{\rm ref})$.
+\STATE Sample quadrature nodes $u\in[0,s_i]$ for every batch item.
+\STATE Recompute online physics features $\mathbf{q}(u,\mathbf{c}_i)$ at each node.
+\STATE Integrate Eq.~\eqref{eq:integral} to obtain $\widehat{\tau}_{p,i}$.
+\STATE Sample fixed-context stress sweeps for curvature and diagnostics.
+\STATE Compute $\mathcal{L}_{\rm data}$, $\mathcal{L}_{\rm BB}$, $\mathcal{L}_{\rm curv}$, and $\mathcal{L}$.
+\STATE Update parameters $\Theta=\{\phi,\theta,\psi\}$ using Adam or AdamW.
+\ENDFOR
+\RETURN trained GeoSPIN and fixed-context physical diagnostics.
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Full Direct-Shear Curve Reconstruction}
+For local direct-shear records, we attach a curve head
+\begin{equation}
+[\widehat{\tau}(x,\sigma_n,\mathbf{c}),\widehat d(x,\sigma_n,\mathbf{c})]=xH_{\omega}(x,\sigma_n,\mathbf{c},\widehat{\tau}_p),
+\label{eq:curvehead}
+\end{equation}
+where $x$ is shear displacement, $\sigma_n$ is the applied normal stress, and $H_{\omega}$ is a neural curve head. The factor $x$ enforces zero response at zero displacement. The empirical curve baseline is C-BB, the calibrated Barton--Bandis curve law. Algorithm~\ref{alg:curve} summarizes this local curve reconstruction protocol.
+
+\begin{algorithm}[t]
+\caption{Local Direct-Shear Curve Reconstruction}
+\label{alg:curve}
+\begin{algorithmic}[1]
+\REQUIRE local direct-shear records with displacement, stress, normal stress, and deformation proxy
+\STATE Calibrate and align monotone direct-shear channels.
+\STATE Group curves by applied normal stress $\sigma_n$.
+\STATE Train the curve head in Eq.~\eqref{eq:curvehead} using displacement nodes.
+\STATE Calibrate C-BB on the same local monotone curves.
+\STATE Plot experiment, GeoSPIN, and C-BB for each normal stress.
+\STATE Report RMSE and $R^2$ for shear stress and deformation proxy.
+\end{algorithmic}
+\end{algorithm}
+
+\section{Theoretical Analysis}
+\label{sec:theory}
+This section explains why continuous stress-path integral learning is more appropriate than row-wise regression with soft physical penalties. The analysis is deliberately path-wise: every statement is conditioned on a fixed context $\mathbf{c}$.
+
+\begin{definition}[Fixed-context stress path]
+For a static context $\mathbf{c}$ and a maximum coordinate $S>0$, the fixed-context stress path is the set $\Gamma_{\mathbf{c}}=[0,S]\times\{\mathbf{c}\}$. A physical monotonicity statement for peak strength is a statement about variation along $s\in[0,S]$ while $\mathbf{c}$ is fixed.
+\end{definition}
+
+\begin{assumption}[Monotone peak-strength path]
+For monotone loading and fixed context $\mathbf{c}$, the true peak strength $\tau_p(s,\mathbf{c})$ is nondecreasing in $s$. This assumption does not imply that post-peak shear stress is monotone in displacement and does not describe cyclic unloading or reloading.
+\end{assumption}
+
+\begin{proposition}[Structural boundary and monotonicity]
+For any fixed context $\mathbf{c}$ and $\sigma\ge0$, GeoSPIN satisfies $\widehat{\tau}_p(0,\mathbf{c})=0$, $\widehat{\tau}_p(\sigma,\mathbf{c})\ge0$, and $\partial\widehat{\tau}_p/\partial\sigma\ge0$.
+\end{proposition}
+
+\begin{proof}
+At $\sigma=0$, Eq.~\eqref{eq:sdef} gives $s=0$, and the integral in Eq.~\eqref{eq:integral} has zero length. Thus $\widehat{\tau}_p(0,\mathbf{c})=0$. For $s>0$, the integrand $r_{\psi}$ is positive by Eq.~\eqref{eq:rate}, so the integral is nonnegative. Finally,
+\begin{equation}
+\frac{\partial\widehat{\tau}_p}{\partial\sigma}=\frac{\partial\widehat{\tau}_p}{\partial s}\frac{\partial s}{\partial\sigma}=r_{\psi}(s,\mathbf{c})(\sigma+\sigma_{\rm ref})^{-1}\ge0.
+\end{equation}
+The conclusion holds independently of the mini-batch composition.
+\end{proof}
+
+\begin{lemma}[Path-wise error accumulation]
+Let $r(s,\mathbf{c})=\partial\tau_p(s,\mathbf{c})/\partial s$ be the true stress-path rate and let $\widehat r(s,\mathbf{c})$ be the GeoSPIN rate. If $|\widehat r(s,\mathbf{c})-r(s,\mathbf{c})|\le\epsilon$ for all $s\in[0,S]$, then
+\begin{equation}
+|\widehat{\tau}_p(s,\mathbf{c})-\tau_p(s,\mathbf{c})|\le s\epsilon,\qquad \forall s\in[0,S].
+\end{equation}
+\end{lemma}
+
+\begin{proof}
+Using the fundamental theorem of calculus and the shared zero boundary,
+\begin{equation}
+\widehat{\tau}_p(s,\mathbf{c})-\tau_p(s,\mathbf{c})=\int_0^s [\widehat r(u,\mathbf{c})-r(u,\mathbf{c})]du.
+\end{equation}
+Taking absolute values and applying the uniform bound gives the result.
+\end{proof}
+
+\begin{theorem}[Integrated risk bound on a stress interval]
+Assume the pointwise prediction loss $\ell(\widehat\tau,\tau)$ is $L$-Lipschitz in its first argument. For a fixed context $\mathbf{c}$ and stress interval $[0,S]$, if the rate error satisfies the condition of Lemma 1, then
+\begin{align}
+&\int_0^S \ell(\widehat{\tau}_p(s,\mathbf{c}),\tau_p(s,\mathbf{c}))ds \nonumber\\
+&\quad \le \int_0^S \ell(\tau_p(s,\mathbf{c}),\tau_p(s,\mathbf{c}))ds
+      +\frac{LS^2\epsilon}{2}.
+\end{align}
+\end{theorem}
+
+\begin{proof}
+By Lipschitz continuity,
+\begin{align}
+&\ell(\widehat{\tau}_p(s,\mathbf{c}),\tau_p(s,\mathbf{c})) \nonumber\\
+&\quad \le \ell(\tau_p(s,\mathbf{c}),\tau_p(s,\mathbf{c}))
+      +L|\widehat{\tau}_p(s,\mathbf{c})-\tau_p(s,\mathbf{c})|.
+\end{align}
+Applying Lemma 1 and integrating over $s\in[0,S]$ gives $L\int_0^S s\epsilon ds=LS^2\epsilon/2$.
+\end{proof}
+
+\begin{lemma}[Invalidity of batch-sort monotonicity across contexts]
+Let two samples $(\sigma_a,\mathbf{c}_a)$ and $(\sigma_b,\mathbf{c}_b)$ satisfy $\sigma_a<\sigma_b$ but $\mathbf{c}_a\ne\mathbf{c}_b$. A penalty that enforces $f(\sigma_a,\mathbf{c}_a)\le f(\sigma_b,\mathbf{c}_b)$ is not equivalent to fixed-context monotonicity.
+\end{lemma}
+
+\begin{proof}
+Fixed-context monotonicity requires $f(\sigma_a,\mathbf{c})\le f(\sigma_b,\mathbf{c})$ for the same $\mathbf{c}$. When $\mathbf{c}_a\ne\mathbf{c}_b$, the inequality compares two different functions along two different paths. It can be false even if each path is monotone. Therefore, a batch-sort penalty is neither necessary nor sufficient for the desired physical property.
+\end{proof}
+
+\begin{theorem}[Trusted-region empirical bias control]
+Suppose the empirical Barton--Bandis estimate satisfies $|\tau_{\rm BB}(s,\mathbf{c})-\tau_p(s,\mathbf{c})|\le\eta$ inside the trusted region and no assumption outside it. If $w_{\rm BB}$ is zero outside the trusted region, then $\mathcal{L}_{\rm BB}$ cannot impose empirical bias outside the trusted region.
+\end{theorem}
+
+\begin{proof}
+By Eq.~\eqref{eq:lbb}, every sample outside the trusted region has $w_{\rm BB}=0$ and contributes zero gradient to $\mathcal{L}_{\rm BB}$. Therefore, the empirical prior affects optimization only where the trust condition holds. Inside the trusted region, the prior is bounded by $\eta$ relative to the true response by assumption; outside it, the learned model is controlled by data and structural constraints rather than by Barton--Bandis imitation.
+\end{proof}
+
+\begin{remark}
+These results do not claim that GeoSPIN solves a complete constitutive law. They prove the narrower but important statement that the learned function is physically valid along the peak-strength stress paths for which the model is designed. This is the appropriate analogue of hard boundary satisfaction in PDE-based PINNs.
+\end{remark}
+
+\section{Experiments}
+\subsection{Experimental Setup}
+We evaluate GeoSPIN on reproduced public rock-joint peak-strength benchmarks and local full-curve direct-shear records. The public peak-strength benchmarks contain two different data units. RockMB-2025 is a tabular database in which each row is a published peak-strength observation from a direct-shear test. The G5 benchmark is derived from public shear stress--displacement curves; each curve is first reduced to one peak-strength record so that all scalar prediction baselines are evaluated on the same target. Table~\ref{tab:protocols} defines the exact protocols used in Table~\ref{tab:main_results}. This protocol table is included because the names ``paper 70/30'', ``random 75/25'', and ``leave-one-profile-out'' correspond to different statistical questions and should not be interpreted as interchangeable splits.
+
+\input{tables/manuscript_protocol_definitions}
+
+For every protocol, the split is created before any preprocessing or model fitting. Feature scalers, target transformations, stress reference values, and model-selection quantities are fitted only on the training partition of the corresponding split. The reported metrics are always computed after inverse-transforming predictions to MPa. For random protocols, the split tests interpolation within the observed experimental distribution. For leave-one-profile-out validation, all samples from one joint profile are held out as a group; this deliberately removes profile-specific information from training and is therefore closer to a source-shift test than to a conventional random split. All methods listed in the same protocol block use exactly the same train/test indices.
+
+The implementation is deliberately kept small enough for the data scale. GeoSPIN uses the residual periodic monotone stress-path integral architecture described in Section IV. Static context variables are embedded with periodic numerical embeddings of dimension 16 and 16 frequencies, followed by a hidden width of 96 and two residual encoder blocks. The path derivative is represented by two positive integrand branches with a nonnegative gated residual branch, and the endpoint integral is evaluated with 16 midpoint quadrature nodes. The training reference stress $\sigma_{\rm ref}$ is the median positive normal stress in the training partition. GeoSPIN is optimized with AdamW, learning rate $2\times10^{-3}$, weight decay $10^{-4}$, 220 epochs, Huber loss with $\delta=0.2$ on $\operatorname{asinh}$-transformed shear strength, and gradient clipping at norm 1.0. Normal stress is not standardized as an ordinary context feature; it is kept as the queried path variable, whereas the remaining context variables are standardized using training-fold statistics.
+
+The neural tabular baselines use the same preprocessing philosophy so that the comparison isolates model structure rather than data handling. FTTransformer tokenizes each continuous feature into a 32-dimensional token, prepends a learned class token, and uses two transformer encoder layers with four attention heads, GELU activation, pre-normalization, and dropout 0.05. RealMLP is implemented as a residual MLP with hidden width 128, three residual blocks, layer normalization, GELU activation, and dropout 0.05. Periodic MLP uses numerical periodic embeddings with dimension 16, 16 frequencies, and initialization scale 0.01, followed by a residual MLP of width 128. KANLite uses two Gaussian-basis KAN-inspired layers with eight centers in $[-2.5,2.5]$, learnable basis width, and hidden width 64. These neural baselines are trained with AdamW, learning rate $2\times10^{-3}$, weight decay $10^{-4}$, 180 epochs, Huber loss with $\delta=0.2$, and gradient clipping at norm 1.0. Their targets are transformed as $\operatorname{asinh}(\tau)$ during training, inverted with $\sinh(\cdot)$ before evaluation, and clipped to nonnegative values only after inversion.
+
+TabM is run as a parameter-efficient ensemble with $k=16$ members and one scalar regression output. In the shared public benchmark script it uses the same AdamW learning rate, weight decay, Huber loss, and 180-epoch budget as the other neural baselines; in the RockMB-specific modern run, the maximum budget is 250 epochs with batch size 64 and patience 30. CatBoost is included as a strong tree baseline rather than as a neural method. The G5 CatBoost run uses CatBoostRegressor with RMSE loss, depth 4, 300 trees, learning rate 0.035, and $L_2$ leaf regularization 3.0. The RockMB paper split uses the locally tuned CatBoost setting: depth 5, 174 trees, learning rate 0.1950, $L_2$ leaf regularization 2.0933, and subsample 0.6698. CatBoost uses the same train/test partitions and numerical feature columns as the neural baselines, and its predictions are evaluated on the MPa scale.
+
+The local experimental records include monotone direct-shear curves, uniaxial compression records, triaxial compression records, and acoustic-emission sidecar files. Only the direct-shear records contain synchronized displacement-like histories suitable for the curve reconstruction task. The uniaxial, triaxial, and acoustic-emission files are therefore treated as audited side information, not as evidence for cyclic direct-shear validation. This distinction is important because cyclic hysteresis requires loading-unloading histories that are not established by the available local monotone curves.
+
+Recent baselines include FTTransformer, KANLite, RealMLP, Periodic MLP, and TabM. Tree models such as random forest, XGBoost, and CatBoost were used during the broader benchmark process, but the main manuscript emphasizes recent neural tabular baselines because the question is whether a physics-regularized neural architecture adds value beyond modern tabular networks. Metrics include $R^2$, RMSE, MAE, MAAPE, sMAPE, and log-RMSE in the code package. The main tables report the most compact subset: $R^2$, RMSE, MAE, and MAAPE.
+
+\subsection{Peak-Strength Forward Prediction}
+\input{tables/manuscript_main_results}
+
+Table~\ref{tab:main_results} is the main scalar peak-strength comparison. It should be read together with Table~\ref{tab:protocols}: R70 tests the reproduced RockMB-2025 paper-style random split, G5-R tests interpolation among extracted public curve peaks, and G5-LOP tests whether a model can generalize when one joint profile is entirely absent during training. The columns report complementary error views. A larger $R^2$ means that the method explains more test-set variance, RMSE penalizes large MPa-scale errors, MAE measures average absolute MPa error, and MAAPE is a bounded relative-angle error that remains stable when strengths are small. GeoSPIN achieves the lowest RMSE on all three protocol blocks and the best $R^2$ on the two random/interpolation protocols. The G5-LOP block is the most important robustness check because it reduces the chance that the model is merely memorizing profile-specific responses. The table does not mix numbers copied from unrelated papers; every row is computed under the same local preprocessing and split definitions.
+
+The results also show why a physics-regularized model should still be evaluated against strong tabular baselines. FTTransformer and KANLite are competitive on some random splits, and Periodic MLP performs strongly on G5. GeoSPIN's advantage is therefore not that neural baselines are weak, but that the stress-path representation improves accuracy while also imposing physical validity. This dual criterion is the main reason we retain GeoSPIN as the final model rather than a more complex KAN--ODE--PINN.
+
+\subsection{Transformation and Structural-Design Ablation}
+\input{tables/manuscript_transform_ablation}
+
+Table~\ref{tab:transform_ablation} separates preprocessing effects from architectural effects. The first four rows keep the predictor as a plain MLP and change only how normal stress $\sigma$ and shear strength $\tau$ are represented. ``Raw $\sigma$'' means that normal stress is used in MPa, whereas ``log $\sigma$'' uses the dimensionless logarithmic stress coordinate. ``Raw $\tau$'' trains on the original peak strength, whereas ``asinh $\tau$'' trains on the robust target transform and then converts predictions back to MPa before evaluation. The fifth row replaces the plain MLP with the GeoSPIN stress-path integral while retaining the best transformed coordinate system. Thus, the table answers two questions: whether nondimensional stress and robust target transforms improve numerical conditioning, and whether the monotone integral architecture adds value beyond those transforms.
+
+The results show that the target transform is more important than simply logging stress: asinh $\tau$ reduces RMSE and relative error even when raw stress is retained. Combining log-stress with asinh target gives a stronger plain-MLP baseline, which is the fair comparison for GeoSPIN. The final row then improves $R^2$, RMSE, MAE, and relative $L_2$ error further, indicating that the gain is not only a preprocessing artifact. This mirrors the nondimensionalization motivation in physics-informed beam studies: scaling and dimensionless coordinates change the numerical conditioning of the learning problem, while the constrained output map changes the admissible function class.
+
+The ablation also clarifies the contribution of the architecture. A transformed plain MLP can improve over raw inputs, but it does not guarantee fixed-context monotonicity or zero boundary behavior. GeoSPIN adds the integral structure that makes these properties exact. Thus, the final method combines two ideas: robust stress-aware preprocessing and a constrained stress-path output map.
+
+\subsection{Solution and Error Fields}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.96\textwidth]{figures/lit_fig03_solution_and_absolute_error_field.png}
+\caption{Predicted peak-strength field and absolute-error field over a stress-context grid. The left panel visualizes the learned solution field, and the right panel shows where approximation error concentrates.}
+\label{fig:field}
+\end{figure*}
+
+Figure~\ref{fig:field} follows the validation style of physics-informed numerical studies, where a scalar error table is not sufficient. The predicted field indicates whether the learned response is smooth and mechanically plausible over a grid, while the error field reveals sparse or high-curvature regimes. In a small-data engineering task, such a plot is also useful for experimental design because it suggests where additional laboratory tests would reduce uncertainty.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.96\textwidth]{figures/lit_fig04_multifeature_prediction_contours.png}
+\caption{Counterfactual prediction contours. Each panel varies one physically meaningful variable while indexing fixed contexts vertically. The vertical axis is a context rank, not a spatial coordinate.}
+\label{fig:contours}
+\end{figure*}
+
+Figure~\ref{fig:contours} visualizes counterfactual sweeps. The normal-stress panel directly tests the path variable, whereas the JRC, UCS, and specimen-length panels show how static descriptors modulate the predicted response. The caption explicitly states that rows are fixed-context ranks. This prevents the common misinterpretation that an arbitrary sample index is a physical coordinate.
+
+\subsection{Derived Stress-Path Quantities and Constraint Diagnostics}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.96\textwidth]{figures/lit_fig05_slope_and_curvature_fields.png}
+\caption{Stress-path slope and curvature fields. The slope is the derivative of predicted peak strength with respect to the dimensionless path coordinate, and the curvature is computed only on fixed-context sweeps.}
+\label{fig:slope_curv}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.96\textwidth]{figures/lit_fig06_derived_stress_path_quantities.png}
+\caption{Derived stress-path quantities, including predicted strength, stress sensitivity, curvature, and discrepancy from the trusted empirical reference.}
+\label{fig:derived}
+\end{figure*}
+
+\input{tables/manuscript_physics_checks}
+
+Figures~\ref{fig:slope_curv} and~\ref{fig:derived} evaluate the derivatives and derived quantities of the learned function. This is analogous to reporting bending moment, velocity, acceleration, or residual fields in physics-informed structural studies. The slope field is nonnegative by construction. The curvature field is not forced to be positive or negative because rock-joint response may transition from rapid asperity mobilization to saturation-like behavior. Table~\ref{tab:physics_checks} reports the corresponding implementation diagnostics. The zero violation rates are not treated as an empirical discovery; they confirm that the structural constraints are implemented correctly.
+
+\subsection{Held-Out Prediction Panels}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.96\textwidth]{figures/lit_fig09_prediction_performance_panels.png}
+\caption{Held-out prediction panels. Black curves denote measured strengths, colored curves denote GeoSPIN predictions, and gray bars denote absolute errors.}
+\label{fig:panels}
+\end{figure*}
+
+Figure~\ref{fig:panels} shows pointwise held-out predictions. Such plots are common in geotechnical ML papers, but they must be interpreted carefully because the horizontal axis is an index rather than a physical coordinate. We use them as prediction audits: they reveal local failures, outliers, and ordering errors that aggregate RMSE may hide. They are not used as evidence of continuous physical trajectories; that role is reserved for fixed-context sweeps.
+
+\subsection{Full Direct-Shear Curve Reconstruction}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.96\textwidth]{figures/ours_vs_bb_full_shear_dilation.png}
+\caption{Full local direct-shear curve validation. Experimental curves, GeoSPIN predictions, and C-BB curves are compared under 1, 2, and 3 MPa normal stress. The top row shows shear stress and the bottom row shows dilation or normal-deformation proxy.}
+\label{fig:curve}
+\end{figure*}
+
+The full-curve experiment is different from the peak-strength benchmark. Instead of predicting one scalar peak per specimen, it reconstructs the measured monotone response as a function of shear displacement for the local direct-shear tests. The table therefore has one row for each target quantity, method, and applied normal stress. The column $\sigma_n$ identifies the constant normal stress of the curve, RMSE measures pointwise curve error in the physical units of that target, and $R^2$ measures how much of the curve variation is explained relative to the mean measured curve. ``Shear stress'' is the calibrated shear-stress channel in MPa. ``Dilation proxy'' denotes the available normal-deformation channel; it is reported as a proxy because the raw local files provide a deformation-like measurement rather than a fully verified dilation measurement. GeoSPIN denotes the learned curve head attached to the stress-path model, whereas C-BB denotes the calibrated Barton--Bandis curve law fitted on the same local monotone curves and used only as an empirical reference.
+
+\input{tables/manuscript_curve_metrics}
+
+Figure~\ref{fig:curve} and Table~\ref{tab:curve_metrics} evaluate local full-curve reconstruction. GeoSPIN achieves lower RMSE for both shear stress and the deformation proxy under all three normal stresses. For shear stress, the C-BB rows have negative $R^2$ because their residual error exceeds the variance of the measured shear-stress curve; in other words, the calibrated empirical curve law is worse than predicting the mean curve for these local shear trajectories. This does not make Barton--Bandis useless. It shows that C-BB is an interpretable mechanical reference and trusted-region prior, not a full local trajectory label. For the deformation proxy, C-BB captures the broad monotone trend but remains much less accurate in RMSE than GeoSPIN. This experiment is intentionally described as local because public peak-strength tables do not provide synchronized full displacement and dilation histories.
+
+\section{Optimization, Stability, and Loss Audit}
+\subsection{Why the Integral Parameterization Stabilizes Training}
+The stress-path integral parameterization changes the optimization geometry of the problem. In a direct predictor $N_{\Theta}(\sigma,\mathbf{c})$, the network must learn the absolute magnitude of peak strength and its monotone stress dependence simultaneously. A small local error in the learned function can immediately create a nonphysical response because no sign constraint exists on the derivative. In GeoSPIN, the network learns a rate $r_{\psi}$ and the prediction is an accumulated quantity. The positivity of $r_{\psi}$ reduces the admissible function space to paths that satisfy the most basic physical constraint. This does not make the regression problem trivial, but it removes an entire class of invalid hypotheses.
+
+This distinction is analogous to the nondimensional PINN beam example. There, dimensional PDE coefficients created optimization difficulty, and nondimensional equations made the residual numerically tractable. Here, raw normal stress and raw shear strength can also produce poorly conditioned training because stresses and strengths may occupy different ranges across sources. The logarithmic stress coordinate and asinh target transform reduce this imbalance. Table~\ref{tab:transform_ablation} shows that this transformation improves validation behavior before the full integral architecture is added, and that the integral model further improves the stress-path response.
+
+\begin{lemma}[Stress-coordinate conditioning]
+Let $s=\log(1+\sigma/\sigma_{\rm ref})$. For any $0\le\sigma\le\sigma_{\max}$, the derivative of the coordinate map satisfies
+\begin{equation}
+0<\frac{\partial s}{\partial\sigma}\le \frac{1}{\sigma_{\rm ref}}.
+\end{equation}
+Thus, high-stress changes are compressed relative to raw stress changes.
+\end{lemma}
+
+\begin{proof}
+Differentiating Eq.~\eqref{eq:sdef} gives $\partial s/\partial\sigma=(\sigma+\sigma_{\rm ref})^{-1}$. Since $\sigma\ge0$, this derivative is positive and bounded above by $1/\sigma_{\rm ref}$. Therefore, large raw-stress intervals are mapped to moderate path-coordinate intervals.
+\end{proof}
+
+\subsection{Why Redundant Losses Are Removed}
+A common way to make a geotechnical neural model appear physics-informed is to add multiple auxiliary losses: positivity, boundary, monotonicity, smoothness, empirical consistency, and upper-bound penalties. Such a list can be impressive but scientifically weak if several losses are redundant or inactive. GeoSPIN uses the opposite design philosophy. A loss is retained only if it enforces a property that is not already guaranteed and if it is computed on a physically meaningful domain.
+
+The positivity and zero-boundary losses are removed because Eq.~\eqref{eq:integral} already guarantees both. A batch-sort monotonicity loss is removed because Lemma 2 shows that it is not a fixed-context derivative. Smoothness is replaced by curvature regularization on counterfactual sweeps where the context is held fixed. Barton--Bandis consistency is restricted by Eq.~\eqref{eq:wbb}; otherwise, the empirical model would be treated as a universal truth. This audit is part of the methodology rather than a side note, because it determines which physical statements are actually supported.
+
+\begin{proposition}[Redundancy of positivity and boundary penalties]
+Assume the model output is defined by Eq.~\eqref{eq:integral}. For any nonnegative weights $\lambda_{+}$ and $\lambda_0$, adding losses of the form $\lambda_{+}\max(0,-\widehat{\tau}_p)^2$ and $\lambda_0\widehat{\tau}_p(0,\mathbf{c})^2$ does not change the feasible set of GeoSPIN predictions.
+\end{proposition}
+
+\begin{proof}
+By Proposition 1, $\widehat{\tau}_p\ge0$ and $\widehat{\tau}_p(0,\mathbf{c})=0$ for all contexts. Therefore both added penalties are identically zero for every parameter setting of GeoSPIN. They provide no gradient signal and no additional constraint.
+\end{proof}
+
+\subsection{Relation to Neural ODEs and Integral Networks}
+GeoSPIN may be implemented with a latent neural ODE, as in Eq.~\eqref{eq:latent}, or with a direct integral MLP that removes the latent dynamics. The retained model is selected by repeated validation rather than by architectural preference. This is important because the scientific contribution is not the presence of an ODE by itself. The contribution is the stress-path integral constraint. If a direct integral MLP matches the latent ODE in repeated validation, the simpler version should be favored for publication. Conversely, if the latent state improves accuracy or derivative behavior, it can be retained as a compact continuous-depth representation.
+
+This model-selection principle also applies to KAN-style bases. KANs can be useful function approximators, but they should not be kept merely because they are novel. In a small geotechnical dataset, additional flexibility can improve interpolation while worsening stability under source shift. The final manuscript reports only the best retained GeoSPIN configuration. Alternative variants are treated as ablations rather than as co-equal proposed models.
+
+\section{Reproducibility Protocol and Experimental Rationale}
+\subsection{Data Splits and Leakage Control}
+The public benchmark protocols are designed to avoid mixing incomparable numbers. Every baseline in Table~\ref{tab:main_results} is evaluated under the same local preprocessing and split. This differs from many literature surveys in which a method's reported score on one dataset is compared with another method's score on a different dataset. Such comparisons are not valid for a small geotechnical database because source composition, lithology, stress range, and feature availability can dominate the metric.
+
+When source or profile information is available, group-style or leave-profile splits are more informative than random splits. A random split mainly tests interpolation within the observed distribution. A leave-profile split tests whether the model transfers to a related but unseen profile. GeoSPIN is designed for both settings: the stress-path structure improves physical behavior under counterfactual sweeps, while the robust preprocessing and trusted prior help regularize the small-data fit.
+
+\subsection{Fixed-Context Sweep Evaluation}
+The fixed-context sweep protocol is central to the paper. For each selected context, normal stress is sampled on a log-uniform grid. The context is held constant, online physics features are recomputed at each stress node, and the model is evaluated through the integral head. A monotonic violation is counted only when adjacent predictions along the same path decrease. Boundary error is computed by evaluating the same context at $\sigma=0$. Negative prediction rate is computed on the same sweeps and on held-out samples.
+
+This protocol is stricter and more meaningful than checking random pairs in the test set. Two test samples with different roughness or wall strength should not be ordered by normal stress alone. Fixed-context sweeps are the correct numerical analogue of the mathematical derivative in Proposition 1. The same sweeps generate the slope and curvature fields in Figs.~\ref{fig:slope_curv} and~\ref{fig:derived}.
+
+\subsection{Curve Reconstruction as a Local Inverse-Style Problem}
+The curve reconstruction experiment plays the role of an inverse-style or validation problem in the TNNLS beam-paper structure. In the beam paper, forward solutions are validated by displacement and error fields, and inverse problems recover unknown parameters or forces from partial observations. In our setting, the public peak tables provide only scalar strengths, but the local direct-shear files provide displacement histories. We therefore ask whether a model trained with stress-path structure can reconstruct the measured local shear and deformation trajectories.
+
+This experiment has a narrower claim than the peak-strength benchmark. It does not establish universal curve generalization because the public datasets do not provide full curves. It does establish that, when full local curves are available, GeoSPIN can be extended to reproduce them more accurately than C-BB. This is valuable because geotechnical constitutive papers often validate proposed laws by plotting shear stress and dilation under several normal stresses. Figure~\ref{fig:curve} follows that convention while clearly labeling the result as local monotone direct-shear validation.
+
+\subsection{Failure Modes and Reporting Rules}
+The reporting rules are intentionally conservative. We do not report negative-$R^2$ baselines as evidence of competitive performance. We do not claim cyclic hysteresis without cyclic loading data. We do not call the method a PDE-residual PINN. We do not present inactive physics penalties as core contributions. These restrictions make the manuscript less flashy but more defensible. They also align with the broader goal of publishing a robust scientific machine-learning paper rather than a complex model whose components are difficult to justify.
+
+A remaining failure mode is extrapolation beyond the range of available contexts. GeoSPIN can guarantee monotonicity along normal stress for a fixed context, but it cannot guarantee that a context far outside the training distribution is physically represented. This is where uncertainty modeling, ensembles, and source-aware validation should be added in future work. Another failure mode is ambiguity in deformation-proxy channels. If the local measurement is not a direct dilation measurement, the manuscript uses the term deformation proxy rather than overstating the sensor semantics.
+\section{Uncertainty-Aware Extension and Calibration Metrics}
+\subsection{Heteroscedastic Stress-Path Prediction}
+Small geotechnical datasets require reliability estimates because a point prediction can be accurate on average while being unsafe for high-stress or sparse-context cases. GeoSPIN can be extended with a heteroscedastic head without changing the structural mean constraint. The model predicts a mean peak strength through the integral head and a log-variance $a(s,\mathbf{c})$ through an auxiliary head. The variance is $v(s,\mathbf{c})=\operatorname{softplus}(a(s,\mathbf{c}))+v_0$, where $v_0>0$ is a numerical floor. The Gaussian negative log-likelihood is
+\begin{equation}
+\mathcal{L}_{\rm NLL}=\frac{1}{2N}\sum_{i=1}^{N}\left[\frac{(\tau_{p,i}-\widehat{\tau}_{p,i})^2}{v_i}+\log v_i\right].
+\end{equation}
+This objective allows uncertainty to increase in regimes where residual variance is high. The mean prediction remains structurally monotone because the variance head does not alter Eq.~\eqref{eq:integral}. Thus, reliability modeling is added without weakening the physical constraint.
+
+\subsection{Deep Ensembles}
+An alternative is a deep ensemble of $K$ GeoSPIN models trained with different random seeds or bootstrap samples. If model $k$ predicts mean $\widehat{\tau}^{(k)}$ and variance $v^{(k)}$, the ensemble mean is
+\begin{equation}
+\bar{\tau}=\frac{1}{K}\sum_{k=1}^{K}\widehat{\tau}^{(k)},
+\end{equation}
+and the total predictive variance is
+\begin{equation}
+\bar v=\frac{1}{K}\sum_{k=1}^{K}\left[v^{(k)}+(\widehat{\tau}^{(k)}-\bar{\tau})^2\right].
+\end{equation}
+The first term represents aleatoric uncertainty and the second term represents epistemic disagreement. For small rock-joint databases, epistemic uncertainty is often more informative because it grows when a context differs from the training distribution. This is particularly useful for stress-bin analysis: a model may be well calibrated at low normal stress but uncertain at high stress where fewer experiments exist.
+
+\subsection{Calibration Metrics}
+For a nominal confidence level $1-\alpha$, the predictive interval is
+\begin{equation}
+I_i^{(\alpha)}=[\bar{\tau}_i-z_{1-\alpha/2}\sqrt{\bar v_i},\bar{\tau}_i+z_{1-\alpha/2}\sqrt{\bar v_i}],
+\end{equation}
+where $z_{1-\alpha/2}$ is the normal quantile. Prediction interval coverage probability (PICP) is
+\begin{equation}
+\mathrm{PICP}=\frac{1}{N}\sum_{i=1}^{N}\mathbb{I}[\tau_{p,i}\in I_i^{(\alpha)}],
+\end{equation}
+and mean prediction interval width (MPIW) is
+\begin{equation}
+\mathrm{MPIW}=\frac{1}{N}\sum_{i=1}^{N}|I_i^{(\alpha)}|.
+\end{equation}
+A calibrated model should have PICP close to the nominal level while keeping MPIW reasonably small. We also compute calibration curves by binning predicted confidence levels and comparing empirical coverage. Finally, stress-bin uncertainty is computed by grouping samples according to normal-stress intervals and averaging $\sqrt{\bar v_i}$ in each bin.
+
+\subsection{Why Reliability Is Reported Separately}
+The main manuscript focuses on the deterministic GeoSPIN result because the central claim is structural validity of the mean predictor. Nevertheless, the reliability extension is important for deployment. A deterministic model can be physically valid but overconfident. Conversely, a calibrated ensemble can identify sparse stress regimes where additional laboratory tests are needed. The extension therefore complements, rather than replaces, the stress-path architecture. In a complete engineering workflow, the deterministic prediction, the fixed-context violation report, and the calibration report should be read together.
+
+\section{Detailed Proof and Interpretation of the Loss Design}
+\subsection{Counterfactual Derivatives Versus Dataset Ordering}
+A recurring source of error in rock-joint learning is the confusion between dataset ordering and physical differentiation. Suppose the dataset contains samples $(\sigma_i,\mathbf{c}_i,\tau_i)$ for $i=1,\ldots,N$. Sorting the dataset by $\sigma_i$ creates a sequence, but this sequence is not a physical trajectory unless $\mathbf{c}_i$ is constant. A derivative such as $\partial\tau_p/\partial\sigma$ is defined by perturbing $\sigma$ while holding $\mathbf{c}$ fixed. Therefore, finite differences across sorted dataset rows estimate a mixture of stress effects and context effects. This is why GeoSPIN uses counterfactual sweeps for monotonicity and curvature.
+
+The distinction can be formalized by writing the total difference between two samples as
+\begin{equation}
+\Delta \tau = \tau_p(\sigma_b,\mathbf{c}_b)-\tau_p(\sigma_a,\mathbf{c}_a).
+\end{equation}
+Adding and subtracting $\tau_p(\sigma_b,\mathbf{c}_a)$ gives
+\begin{equation}
+\Delta \tau = [\tau_p(\sigma_b,\mathbf{c}_a)-\tau_p(\sigma_a,\mathbf{c}_a)]+[\tau_p(\sigma_b,\mathbf{c}_b)-\tau_p(\sigma_b,\mathbf{c}_a)].
+\end{equation}
+The first bracket is the fixed-context stress effect. The second bracket is the context shift effect. A batch-sort penalty cannot separate these terms, so it is not a reliable physics constraint.
+
+\subsection{Why C-BB Is a Reference Rather Than a Label}
+C-BB is deliberately named as a calibrated Barton--Bandis curve law rather than a BB-like target. This terminology matters. A label is something the model should reproduce; a reference is something the model should be compared against. In trusted low-stress regimes, Barton--Bandis provides useful guidance. In sparse or high-stress regimes, disagreement between GeoSPIN and C-BB is not automatically an error. It may indicate that the empirical law is outside its calibration boundary. The trusted-region loss formalizes this distinction by assigning zero or decayed weight outside the accepted region.
+
+\subsection{Interpretation of Negative C-BB Curve $R^2$}
+The negative $R^2$ values for C-BB in Table~\ref{tab:curve_metrics} should not be hidden. They are scientifically informative. They show that a calibrated empirical curve law can fail to reproduce the local shear-stress trajectory even when it remains useful as a qualitative mechanical reference. GeoSPIN's improvement on these curves suggests that the neural curve head captures local shape information that the empirical curve law misses. However, because the curve data are local, the result should be interpreted as local reconstruction rather than universal curve generalization.
+
+\subsection{Connection Between Theory and Figures}
+The figures are not decorative. Figure~\ref{fig:field} corresponds to the learned solution and error field. Figure~\ref{fig:contours} corresponds to counterfactual paths. Figures~\ref{fig:slope_curv} and~\ref{fig:derived} correspond to derivative quantities used in the theory. Figure~\ref{fig:panels} corresponds to pointwise held-out prediction. Figure~\ref{fig:curve} corresponds to the local curve reconstruction problem. This mapping mirrors the evidence chain in TNNLS physics-informed papers: a model is validated through the solution, the error, the derived physical quantities, and a task-specific inverse or validation experiment.
+\section{Discussion}
+GeoSPIN should be understood as a stress-path peak-strength model with a local curve extension, not as a complete constitutive simulator. The monotonicity proof applies to peak strength as a function of normal stress for fixed context. It does not imply monotonic shear stress with displacement, and it does not model cyclic hysteresis. This limitation is not a weakness of the architecture; it is a boundary of the available data and the physical claim.
+
+The empirical prior has a similar boundary. Barton--Bandis information is useful because it captures domain knowledge, but it is not imposed globally. The trusted-region formulation means that empirical mechanics guides the model where it is expected to be reliable and becomes inactive outside that region. This is more defensible than presenting a global BB consistency loss as a universal physics law.
+
+The local sidecar files suggest future directions. The direct-shear curves enable full curve reconstruction. The uniaxial and triaxial files could support broader rock-mechanics representation learning. The acoustic-emission records could support failure-process prediction if synchronized with mechanical channels. These extensions require careful temporal alignment and are not claimed in the present manuscript.
+
+\section{Conclusion}
+This article introduced GeoSPIN, a continuous stress-path integral network for physics-regularized rock-joint shear prediction. By separating static context from online stress-dependent features and representing peak strength as the integral of a positive neural rate, GeoSPIN enforces zero boundary behavior, nonnegative predictions, and fixed-context monotonicity by construction. Reproduced public benchmark experiments show improved RMSE against recent neural tabular baselines, and local direct-shear experiments show stronger full-curve reconstruction than C-BB. The resulting framework provides a publishable direction for small-data geomechanics: use structural constraints for exact physics, empirical priors only where trusted, and validation that includes fields, derivatives, pointwise errors, and full curves.
+
+\appendices
+\section{Additional Proof Details}
+\subsection{Proof Details for Path-Wise Error Accumulation}
+The path-wise error bound used in Section~\ref{sec:theory} is intentionally simple, but it is central to the design. The true and learned peak-strength functions share the zero boundary because both are evaluated from the origin of the stress path. If the learned rate is close to the true rate, the peak-strength error cannot appear abruptly; it accumulates through the integral. This property is not available to an unconstrained direct predictor, where the function value at each stress can vary independently subject only to data loss. In small-data regimes, such independence increases the probability of nonphysical oscillation between measured stress levels.
+
+A more general version replaces the uniform rate error by an $L^1$ rate error. For any $s\in[0,S]$,
+\begin{equation}
+|\widehat{\tau}_p(s,\mathbf{c})-\tau_p(s,\mathbf{c})|\le \int_0^s |\widehat r(u,\mathbf{c})-r(u,\mathbf{c})|du.
+\end{equation}
+Integrating again over $s$ gives
+\begin{align}
+&\int_0^S |\widehat{\tau}_p(s,\mathbf{c})-\tau_p(s,\mathbf{c})|ds \nonumber\\
+&\quad \le \int_0^S (S-u)|\widehat r(u,\mathbf{c})-r(u,\mathbf{c})|du.
+\end{align}
+This expression shows that rate errors near low stress influence a larger portion of the path than rate errors near the endpoint. It also suggests why fixed-context sweep diagnostics are useful: they identify where along the path the rate discrepancy is likely to matter most.
+
+\subsection{Proof Details for Batch-Sort Invalidity}
+The batch-sort issue can be viewed as a violation of the ceteris paribus condition. A derivative with respect to normal stress is a partial derivative, not a total derivative over the empirical dataset. If $\mathbf{c}$ changes with $\sigma$ in the dataset, then the total variation of strength can be decomposed as a stress effect plus a context effect. A monotonicity penalty on the total variation incorrectly attributes both effects to stress. In rock-joint data, this is not a small technicality because JRC and JCS can change strength more than normal stress over some ranges. Therefore, batch sorting can penalize a physically valid model or reward an invalid one.
+
+GeoSPIN avoids this by evaluating monotonicity through constructed paths. The context is copied, the stress coordinate is varied, and all online physics features are recomputed. This makes the numerical diagnostic match the mathematical statement. The same logic applies to curvature: a second finite difference is meaningful only along a single context path.
+
+\subsection{Proof Details for Trusted-Region Regularization}
+The trusted-region result follows from the support of the weight $w_{\rm BB}$. If $w_{\rm BB}=0$ outside a region $\Omega_{\rm trust}$, then the gradient of $\mathcal{L}_{\rm BB}$ with respect to model parameters is also zero for samples outside $\Omega_{\rm trust}$. Therefore, the empirical prior cannot pull the model toward Barton--Bandis predictions outside the trusted regime. This is a structural property of the objective, not a hyperparameter accident. Soft trust weights relax the hard boundary but preserve the same principle by exponentially reducing the empirical force as the stress ratio leaves the trusted range.
+
+\section{Reproducibility Checklist}
+\subsection{Data and Preprocessing}
+All public benchmark results use the same preprocessing pipeline for GeoSPIN and baselines. Static context variables are scaled using training-set statistics only. Normal stress is transformed through Eq.~\eqref{eq:sdef}. Peak strength is transformed through the asinh map for the data loss and converted back to MPa for metrics. Stress-dependent engineered variables are recomputed online during integration and are not stored as static encoder inputs. Local curve files are processed separately from public peak-strength tables because the two data modalities support different claims.
+
+\subsection{Model Selection}
+The retained model is selected by validation performance and physical diagnostics. A more complex architecture is not automatically preferred. KAN-like bases, latent ODE dynamics, direct integral MLPs, fixed loss weights, and adaptive loss weights are all treated as candidate components. Components that do not improve repeated validation or diagnostics should be removed from the final paper. This is why the manuscript presents GeoSPIN as a single retained model rather than a family of equally promoted variants.
+
+\subsection{Metrics and Reporting}
+Peak-strength metrics are reported on the original MPa scale. RMSE and MAE measure absolute engineering error. MAAPE reduces the instability of percentage errors near small strengths. $R^2$ is reported but not used alone because negative values can occur for poor baselines and can obscure local error behavior. For uncertainty extensions, PICP and MPIW should be computed at fixed nominal levels and stratified by stress bins. For physics diagnostics, monotonic violation rate must be computed on fixed-context sweeps rather than arbitrary test-set pairs.
+
+\subsection{Figure Generation}
+The six main figures serve distinct purposes. The solution/error field tests surface behavior. The multi-feature contour figure tests counterfactual interpretation. The slope and curvature fields test derivatives. The derived-quantity figure summarizes path behavior. The held-out prediction panels show pointwise errors. The full curve figure compares experiment, GeoSPIN, and C-BB under multiple normal stresses. These figures should not be replaced by generic scatter plots because they correspond to specific claims in the manuscript.
+\section{Claim-to-Evidence Mapping}
+A submission-quality physics-regularized paper should make every claim traceable to either a mathematical construction or an experimental artifact. The first claim of this paper is that GeoSPIN enforces the zero-stress boundary and fixed-context monotonicity structurally. The evidence is Eq.~\eqref{eq:integral}, Proposition 1, and the fixed-context diagnostics in Table~\ref{tab:physics_checks}. The second claim is that stress-dependent physics features should be computed online rather than encoded as static inputs. The evidence is the problem formulation in Section III and the counterfactual contour interpretation in Fig.~\ref{fig:contours}. The third claim is that Barton--Bandis should be used as a trusted empirical prior rather than a global target. The evidence is the trust-weighted loss in Eq.~\eqref{eq:lbb}, Theorem 3, and the C-BB comparison in Table~\ref{tab:curve_metrics}. The fourth claim is that the proposed model is competitive with recent tabular neural baselines. The evidence is Table~\ref{tab:main_results} and the pointwise prediction panels in Fig.~\ref{fig:panels}.
+
+The fifth claim is that the model produces physically interpretable derivatives along stress paths. The evidence is not a scalar metric but the slope, curvature, and derived-quantity figures. This mirrors the validation logic of physics-informed structural papers, where the predicted solution is accompanied by error maps and derived mechanical quantities. The sixth claim is that the local curve extension can reconstruct monotone direct-shear trajectories more accurately than the calibrated empirical curve law. The evidence is Fig.~\ref{fig:curve} and Table~\ref{tab:curve_metrics}. The manuscript deliberately does not claim cyclic hysteresis, full constitutive simulation, or PDE-residual physics because no figure or table in the current evidence set supports those claims.
+
+This mapping is included to make the paper easier to revise for TNNLS review. If reviewers question a claim, the response should point to the corresponding equation, theorem, figure, or table. If no such artifact exists, the claim should be weakened or removed. This rule is also why the final manuscript keeps one proposed model name, GeoSPIN, instead of presenting several partially supported variants. The paper's argument is strongest when the method, theory, and experiments all refer to the same retained model.
+\section{Implementation Notes for Reproduction}
+The implementation is organized so that peak-strength prediction, local curve reconstruction, and paper-artifact generation can be reproduced independently. Peak-strength experiments read public benchmark tables, apply the shared preprocessing pipeline, and evaluate all baselines under the same partitions. The stress scale $\sigma_{\rm ref}$ is computed only from the training fold. Target transformations are fitted only on training data and inverted before reporting metrics. This prevents leakage from validation or test samples into the model scale. The code also stores the split identifier with every result row so that tables can be regenerated without mixing protocols.
+
+For GeoSPIN, the dataloader separates static context from queried stress before the forward pass. This separation is not optional. If stress-dependent variables are precomputed once and stored as static features, a fixed-context sweep no longer represents a coherent physical path because the online variables would not update with the queried stress. During each forward pass, the quadrature nodes determine the current stress through Eq.~\eqref{eq:sinv}; online physics features are then recomputed at those nodes. This is the implementation detail that connects the code to the mathematical formulation.
+
+For local direct-shear reconstruction, the curve script first standardizes the local displacement and stress channels, trains the curve head on the calibrated monotone curves, and then generates three outputs: a prediction table, a metric table, and a six-panel figure comparing experiment, GeoSPIN, and C-BB. The figure is intentionally arranged as two rows by three columns. Each column corresponds to one normal stress, the top row shows shear stress, and the bottom row shows deformation proxy. This layout prevents the visual clutter that appeared when all normal stresses were plotted in one panel.
+
+For paper generation, every figure used in the manuscript is copied into the manuscript figure directory, and every table is maintained as a separate LaTeX input file. This makes it possible to update one artifact without rewriting the manuscript. The final paper should be compiled with the standard sequence pdflatex, bibtex, pdflatex, pdflatex. The final check should verify four conditions: no undefined references, no overfull boxes, at least forty cited references, and figure labels that match the final model name. In the current manuscript, the retained model name is GeoSPIN and the empirical curve reference is C-BB.
+
+A reviewer attempting to reproduce the results should start from the peak-strength benchmark table, then rerun the transformation ablation, then generate the fixed-context physics diagnostics, and finally run the local curve reconstruction. This order mirrors the scientific logic of the paper. First, the model must be competitive on scalar prediction. Second, the preprocessing and stress-path design must be justified. Third, the physical constraints must be checked on the correct domain. Fourth, the local curve extension must be validated against measured trajectories. If any stage fails, later claims should be weakened. This staged protocol is deliberately conservative and is meant to make the work easier to audit.
+\section*{Acknowledgment}
+The authors thank the maintainers of the public rock-joint datasets and acknowledge the local direct-shear, uniaxial, triaxial, and acoustic-emission records used for validation.
+
+\nocite{yang2021bpinn,huber1964robust,donoho2006compressed}
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+\end{document}
+
+
+
+
+

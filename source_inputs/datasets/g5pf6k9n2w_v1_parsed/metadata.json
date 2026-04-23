@@ -1,0 +1,24 @@
+{
+  "source_xlsx": "E:\\xiongyuhu\\stress_prediction\\RockJointNet_external_compare\\datasets\\g5pf6k9n2w_v1\\Open-access original data for the paper of Laboratory Investigation on Water-induced Shear Weakening Behaviors of Sandstone Roughness-walled Joints\\shear-shear displacement data.xlsx",
+  "joint_profiles": [
+    "JA",
+    "JB",
+    "JC"
+  ],
+  "immersion_days": [
+    0,
+    30,
+    180,
+    360
+  ],
+  "normal_stresses_mpa_assumed_order": [
+    1.0,
+    2.0,
+    3.0,
+    4.0,
+    5.0
+  ],
+  "num_curves": 60,
+  "num_curve_points": 5446,
+  "assumption": "Within each immersion-duration block, the five curve pairs are assumed to follow the stated normal-stress order 1, 2, 3, 4, 5 MPa from left to right, matching the dataset description."
+}

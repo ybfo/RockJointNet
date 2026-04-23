@@ -1,0 +1,44 @@
+{
+  "source_pdf": "E:\\xiongyuhu\\stress_prediction\\RockJointNet_external_compare\\rockmb_2025.pdf",
+  "row_count": 288,
+  "reference_count": 15,
+  "references": [
+    "Chengetal.(2022)",
+    "Guietal.(2019)",
+    "Jiangetal.(2022)",
+    "Liuetal.(2021)",
+    "Luetal.(2021)",
+    "Mengetal.(2016)",
+    "Moradianetal.(2012)",
+    "Saneietal.(2015)",
+    "Shenetal.(2022a)",
+    "Tangetal.(2016a)",
+    "Wangetal.(2016)",
+    "Wangetal.,2020",
+    "Wuetal.(2021)",
+    "Yinetal.(2020)",
+    "Zhaoetal.(2021)"
+  ],
+  "manual_fix": {
+    "page": 13,
+    "raw_line": "1144.8 94..5067 110088 6655 12..0046 11..0254",
+    "recovered_rows": [
+      [
+        14.0,
+        9.56,
+        108.0,
+        65.0,
+        1.04,
+        1.05
+      ],
+      [
+        14.8,
+        4.07,
+        108.0,
+        65.0,
+        2.06,
+        1.24
+      ]
+    ]
+  }
+}
