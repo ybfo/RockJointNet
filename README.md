@@ -2,7 +2,7 @@
 
 RockJointNet is the working repository for the rock-joint shear-strength study built around the GeoSPIN model family. This repo keeps the paper-facing assets in one place: benchmark summaries, figure scripts, table builders, cached predictions, manuscript drafts, and the small checkpoints needed for reproducibility checks.
 
-The current layout is meant for day-to-day research use rather than for a polished software release. The emphasis is on making the benchmark pipeline easy to rerun, the manuscript artifacts easy to trace back to source files, and the final figures/tables easy to update when experiments change.
+The current layout is meant for day-to-day research use rather than for a polished software release. The emphasis is on making the benchmark pipeline easy to rerun, the manuscript artifacts easy to trace back to source files, and the final figures and tables easy to update when experiments change.
 
 ## Quick start
 
@@ -27,14 +27,14 @@ python .\scripts\build_checkpoint_manifest.py
 
 ```text
 RockJointNet/
-├── build_all.py
-├── manuscript_tnnls.tex
-├── requirements.txt
-├── checkpoints/
-├── data/
-├── outputs/
-├── scripts/
-└── source_inputs/
+|-- build_all.py
+|-- manuscript_tnnls.tex
+|-- requirements.txt
+|-- checkpoints/
+|-- data/
+|-- outputs/
+|-- scripts/
+`-- source_inputs/
 ```
 
 `data/` stores the cached benchmark summaries, counterfactual sweep exports, local direct-shear curve caches, and manuscript-side table sources. `scripts/` contains the generators for figures, tables, title-page documents, manifests, and framework diagrams. `outputs/` holds the rendered assets that are ready to drop into the paper or supplementary package. `source_inputs/` keeps the original imported tables used to build the cleaned benchmark caches.
@@ -82,7 +82,7 @@ The default scripts read from cached CSV files rather than from live training lo
 - `data/local_curve/curve_reconstruction_predictions.csv`
 - `data/local_curve/curve_reconstruction_metrics.csv`
 
-That makes the figure/table build deterministic and fast, which is helpful when the manuscript is still moving.
+That makes the figure and table build deterministic and fast, which is helpful when the manuscript is still moving.
 
 ## Checkpoints
 
@@ -98,14 +98,3 @@ The main file used for a quick implementation sanity check is:
 - `checkpoints/rockjointnet_smoke_checkpoint.pt`
 
 The archived baseline checkpoints are kept only so the manuscript comparisons remain auditable.
-
-## GitHub publishing
-
-If you want to push this repository from a fresh machine, use:
-
-```powershell
-$env:GITHUB_TOKEN="your_token_here"
-.\publish_github.ps1
-```
-
-The script assumes a GitHub repository named `ybfo/RockJointNet`.
