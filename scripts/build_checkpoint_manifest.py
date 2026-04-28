@@ -14,11 +14,11 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     rows = [
         {
-            "artifact": "GeoSPIN GPU smoke checkpoint",
-            "path": str((CHECKPOINTS / "geospin_gpu_smoke_model.pt").resolve()),
-            "status": "copied into this package" if (CHECKPOINTS / "geospin_gpu_smoke_model.pt").exists() else "missing",
+            "artifact": "RockJointNet smoke checkpoint",
+            "path": str((CHECKPOINTS / "rockjointnet_smoke_checkpoint.pt").resolve()),
+            "status": "copied into this package" if (CHECKPOINTS / "rockjointnet_smoke_checkpoint.pt").exists() else "missing",
             "used_by_default_plot_run": "no",
-            "purpose": "PyTorch/device smoke checkpoint for the stress-path implementation.",
+            "purpose": "PyTorch/device smoke checkpoint for the main RockJointNet implementation.",
         },
         {
             "artifact": "GeoSPIN curve surrogate checkpoint",
@@ -50,14 +50,14 @@ def main() -> None:
         },
         {
             "artifact": "Saved prediction cache",
-            "path": str((ROOT / "data" / "experiment_results" / "prediction_exports.csv").resolve()),
+            "path": str((ROOT / "data" / "experiment_results" / "prediction_cases.csv").resolve()),
             "status": "available",
             "used_by_default_plot_run": "yes",
             "purpose": "Deterministic prediction cache used to regenerate performance-panel figures.",
         },
         {
             "artifact": "Saved full-curve prediction cache",
-            "path": str((ROOT / "data" / "local_curve" / "ours_vs_bb_full_curve_predictions.csv").resolve()),
+            "path": str((ROOT / "data" / "local_curve" / "curve_reconstruction_predictions.csv").resolve()),
             "status": "available",
             "used_by_default_plot_run": "yes",
             "purpose": "Deterministic local direct-shear full-curve cache used to regenerate the 2x3 curve figure.",

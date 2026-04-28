@@ -201,10 +201,10 @@ def draw() -> None:
     ax.text(0.458, 0.092, "$+\\lambda_{\\rm curve}\\mathcal{L}_{\\rm curve}$ for $\\omega$", fontsize=7.5, ha="left")
 
     for path in (
-        OUT / "geospin_framework_reviewed.png",
-        OUT / "geospin_framework_reviewed.pdf",
-        MANUSCRIPT_FIGURES / "geospin_framework_reviewed.png",
-        MANUSCRIPT_FIGURES / "geospin_framework_reviewed.pdf",
+        OUT / "framework_main.png",
+        OUT / "framework_main.pdf",
+        MANUSCRIPT_FIGURES / "framework_main.png",
+        MANUSCRIPT_FIGURES / "framework_main.pdf",
     ):
         fig.savefig(path, bbox_inches="tight", pad_inches=0.04)
     plt.close(fig)

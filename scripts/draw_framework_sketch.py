@@ -227,8 +227,8 @@ def draw() -> None:
 
     # Use tight bbox so the rightmost output is not clipped.
     for ext in ("png", "pdf"):
-        fig.savefig(OUT / f"geospin_framework_simple.{ext}", bbox_inches="tight", pad_inches=0.06)
-        fig.savefig(MANUSCRIPT_FIGURES / f"geospin_framework_simple.{ext}", bbox_inches="tight", pad_inches=0.06)
+        fig.savefig(OUT / f"framework_sketch.{ext}", bbox_inches="tight", pad_inches=0.06)
+        fig.savefig(MANUSCRIPT_FIGURES / f"framework_sketch.{ext}", bbox_inches="tight", pad_inches=0.06)
     plt.close(fig)
 
 

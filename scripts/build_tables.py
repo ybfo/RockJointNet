@@ -41,7 +41,7 @@ def save_table(df: pd.DataFrame, name: str, caption: str, label: str) -> None:
 
 
 def make_main_results() -> pd.DataFrame:
-    summary = pd.read_csv(RECENT / "recent_methods_summary.csv")
+    summary = pd.read_csv(RECENT / "benchmark_summary.csv")
     protocol_short = {
         ("rockmb_2025", "paper_70_30"): "R70",
         ("g5pf6k9n2w", "random_75_25"): "G5-R",
@@ -87,7 +87,7 @@ def make_main_results() -> pd.DataFrame:
 
 
 def make_transform_ablation() -> pd.DataFrame:
-    df = pd.read_csv(EXP / "nondimensional_transform_ablation.csv")
+    df = pd.read_csv(EXP / "transform_ablation_results.csv")
     names = {
         "raw_sigma_raw_tau_plain_mlp": r"Raw $\sigma$, raw $\tau$ MLP",
         "log_sigma_raw_tau_plain_mlp": r"Log $\sigma$, raw $\tau$ MLP",
@@ -108,7 +108,7 @@ def make_transform_ablation() -> pd.DataFrame:
 
 
 def make_physics_checks() -> pd.DataFrame:
-    physics = pd.read_csv(EXP / "physics_validity_fixed_context_sweeps.csv")
+    physics = pd.read_csv(EXP / "fixed_context_constraint_checks.csv")
     max_mono = physics["fixed_context_monotonic_violation_rate_percent"].max()
     max_neg = physics["negative_prediction_rate_percent"].max()
     max_boundary = physics["mean_tau0_boundary_error"].max()
@@ -142,7 +142,7 @@ def make_physics_checks() -> pd.DataFrame:
 
 
 def make_curve_metrics() -> pd.DataFrame:
-    df = pd.read_csv(LOCAL / "ours_vs_bb_full_curve_metrics.csv")
+    df = pd.read_csv(LOCAL / "curve_reconstruction_metrics.csv")
     target_map = {
         "shear_stress_mpa": "Shear stress",
         "dilation_proxy_mm": "Dilation proxy",
@@ -163,7 +163,7 @@ def make_curve_metrics() -> pd.DataFrame:
 
 
 def make_noise_table() -> pd.DataFrame:
-    df = pd.read_csv(EXP / "noise_robustness.csv")
+    df = pd.read_csv(EXP / "noise_robustness_results.csv")
     out = df[["dataset", "model", "noise_level", "R2", "RMSE", "MAE", "MAAPE", "relative_L2_percent"]].copy()
     out["model"] = out["model"].replace({"ResidualPeriodicMonotone": "GeoSPIN"})
     out = out.rename(columns={"relative_L2_percent": "Relative $L_2$ (%)", "R2": r"$R^2$"})
@@ -171,7 +171,7 @@ def make_noise_table() -> pd.DataFrame:
 
 
 def make_inverse_table() -> pd.DataFrame:
-    df = pd.read_csv(EXP / "synthetic_inverse_recovery.csv")
+    df = pd.read_csv(EXP / "inverse_recovery_results.csv")
     grouped = df.groupby("noise_level")[["a_relative_error_percent", "b_relative_error_percent"]].agg(["mean", "std"])
     grouped.columns = ["_".join([str(x) for x in col if x]) for col in grouped.columns.to_flat_index()]
     grouped = grouped.reset_index()
@@ -198,39 +198,39 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     save_table(
         make_main_results(),
-        "table1_main_recent_benchmark_geospin",
+        "table_01_benchmark_results",
         "Peak shear-strength prediction on public rock-joint benchmarks.",
-        "tab:main_recent_benchmark_geospin",
+        "tab:benchmark_results",
     )
     save_table(
         make_transform_ablation(),
-        "table2_transform_ablation",
+        "table_02_transform_ablation",
         "Transformation and structural-design ablation on RockMB-2025.",
         "tab:transform_ablation",
     )
     save_table(
         make_physics_checks(),
-        "table3_physics_validity_checks",
+        "table_03_constraint_checks",
         "Constraint-enforcement and diagnostic summary on fixed-context stress paths.",
-        "tab:physics_validity_checks",
+        "tab:constraint_checks",
     )
     save_table(
         make_curve_metrics(),
-        "table4_full_curve_metrics",
+        "table_04_curve_reconstruction",
         "Local full-curve reconstruction against C-BB, the calibrated Barton--Bandis curve law.",
-        "tab:full_curve_metrics",
+        "tab:curve_reconstruction",
     )
     save_table(
         make_noise_table(),
-        "table5_noise_robustness",
+        "table_05_noise_robustness",
         "Noise robustness under repeated forward prediction.",
         "tab:noise_robustness",
     )
     save_table(
         make_inverse_table(),
-        "table6_synthetic_inverse_recovery",
+        "table_06_inverse_recovery",
         "Synthetic inverse parameter recovery under observation noise.",
-        "tab:synthetic_inverse_recovery",
+        "tab:inverse_recovery",
     )
     copy_manuscript_tables()
     print(f"Saved paper tables to {OUT}")

@@ -142,10 +142,10 @@ def draw() -> None:
     arrow(ax, (0.700, 0.105), (0.800, 0.105))
 
     for path in (
-        OUT / "geospin_framework_clean_v3.png",
-        OUT / "geospin_framework_clean_v3.pdf",
-        MANUSCRIPT_FIGURES / "geospin_framework_clean_v3.png",
-        MANUSCRIPT_FIGURES / "geospin_framework_clean_v3.pdf",
+        OUT / "framework_clean.png",
+        OUT / "framework_clean.pdf",
+        MANUSCRIPT_FIGURES / "framework_clean.png",
+        MANUSCRIPT_FIGURES / "framework_clean.pdf",
     ):
         fig.savefig(path, bbox_inches="tight", pad_inches=0.04)
     plt.close(fig)
@@ -153,4 +153,3 @@ def draw() -> None:
 
 if __name__ == "__main__":
     draw()
-

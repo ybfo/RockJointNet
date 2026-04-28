@@ -60,7 +60,7 @@ def save(
 
 
 def _pivot_feature(feature: str) -> pd.DataFrame:
-    sweeps = pd.read_csv(EXP / "feature_sensitivity_sweeps.csv")
+    sweeps = pd.read_csv(EXP / "counterfactual_feature_sweeps.csv")
     part = sweeps[sweeps["feature"] == feature].copy()
     table = part.pivot_table(index="sample_id", columns="feature_value", values="prediction")
     table = table.assign(_median=table.median(axis=1)).sort_values("_median").drop(columns="_median")
@@ -85,7 +85,7 @@ def fig03_solution_and_error(manifest: list[dict[str, str]]) -> None:
     xx, yy = np.meshgrid(xs, ranks)
     zz = normal_table.to_numpy(float)
 
-    pred = pd.read_csv(EXP / "prediction_exports.csv")
+    pred = pd.read_csv(EXP / "prediction_cases.csv")
     pred["abs_error"] = (pred["y_pred"] - pred["y_true"]).abs()
     pred["case"] = pred["dataset"] + " / " + pred["protocol"]
     cases = [
@@ -122,10 +122,10 @@ def fig03_solution_and_error(manifest: list[dict[str, str]]) -> None:
     fig.colorbar(im, ax=axes[1], fraction=0.046, pad=0.025)
     save(
         fig,
-        "lit_fig03_solution_and_absolute_error_field",
+        "figure_03_prediction_and_error_field",
         manifest,
-        "feature_sensitivity_sweeps.csv; prediction_exports.csv",
-        "TNNLS-style predicted stress-path solution field and protocol-wise absolute-error field.",
+        "counterfactual_feature_sweeps.csv; prediction_cases.csv",
+        "Predicted stress-path solution field and protocol-wise absolute-error field.",
     )
 
 
@@ -160,9 +160,9 @@ def fig04_multifeature_contours(manifest: list[dict[str, str]]) -> None:
     )
     save(
         fig,
-        "lit_fig04_multifeature_prediction_contours",
+        "figure_04_feature_response_maps",
         manifest,
-        "feature_sensitivity_sweeps.csv",
+        "counterfactual_feature_sweeps.csv",
         "Counterfactual response contours for major variables under fixed rock-joint contexts.",
     )
 
@@ -190,9 +190,9 @@ def fig05_slope_curvature(manifest: list[dict[str, str]]) -> None:
         fig.colorbar(cf1, ax=axes[1, col], fraction=0.046, pad=0.025)
     save(
         fig,
-        "lit_fig05_slope_and_curvature_fields",
+        "figure_05_slope_and_curvature_maps",
         manifest,
-        "feature_sensitivity_sweeps.csv",
+        "counterfactual_feature_sweeps.csv",
         "Derivative and curvature maps from fixed-context counterfactual stress sweeps.",
     )
 
@@ -220,15 +220,15 @@ def fig06_derived_quantities(manifest: list[dict[str, str]]) -> None:
                 ax.legend(fontsize=7, frameon=True)
     save(
         fig,
-        "lit_fig06_derived_stress_path_quantities",
+        "figure_06_stress_path_profiles",
         manifest,
-        "feature_sensitivity_sweeps.csv",
+        "counterfactual_feature_sweeps.csv",
         "Stress-path curves and derived slope/curvature quantities for fixed contexts.",
     )
 
 
 def fig09_prediction_performance(manifest: list[dict[str, str]]) -> None:
-    df = pd.read_csv(EXP / "prediction_exports.csv")
+    df = pd.read_csv(EXP / "prediction_cases.csv")
     panels = [
         ("g5pf6k9n2w", "leave_one_immersion_360", "PeriodicMonotone", "G5 leave immersion"),
         ("g5pf6k9n2w", "leave_one_profile_JC", "ResidualPeriodicMonotone", "G5 leave profile"),
@@ -276,16 +276,16 @@ def fig09_prediction_performance(manifest: list[dict[str, str]]) -> None:
     )
     save(
         fig,
-        "lit_fig09_prediction_performance_panels",
+        "figure_09_prediction_panels",
         manifest,
-        "prediction_exports.csv",
+        "prediction_cases.csv",
         "Actual/predicted/error performance panels with error bars placed behind line plots.",
         rect=(0, 0.065, 1, 1),
     )
 
 
 def fig_full_curve(manifest: list[dict[str, str]]) -> None:
-    pred = pd.read_csv(LOCAL / "ours_vs_bb_full_curve_predictions.csv")
+    pred = pd.read_csv(LOCAL / "curve_reconstruction_predictions.csv")
     normals = sorted(pred["normal_stress_mpa"].unique())
     fig, axes = plt.subplots(2, len(normals), figsize=(12.0, 6.2), sharex=True)
     if len(normals) == 1:
@@ -322,9 +322,9 @@ def fig_full_curve(manifest: list[dict[str, str]]) -> None:
     fig.tight_layout(rect=(0, 0, 1, 0.97))
     save(
         fig,
-        "ours_vs_bb_full_shear_dilation",
+        "figure_10_curve_reconstruction",
         manifest,
-        "ours_vs_bb_full_curve_predictions.csv",
+        "curve_reconstruction_predictions.csv",
         "Two-row by three-column local direct-shear full-curve comparison: experiment, GeoSPIN, and C-BB.",
     )
 

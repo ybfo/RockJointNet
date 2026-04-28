@@ -1,7 +1,7 @@
 figure,source,note
-lit_fig03_solution_and_absolute_error_field,feature_sensitivity_sweeps.csv; prediction_exports.csv,TNNLS-style predicted stress-path solution field and protocol-wise absolute-error field.
-lit_fig04_multifeature_prediction_contours,feature_sensitivity_sweeps.csv,Counterfactual response contours for major variables under fixed rock-joint contexts.
-lit_fig05_slope_and_curvature_fields,feature_sensitivity_sweeps.csv,Derivative and curvature maps from fixed-context counterfactual stress sweeps.
-lit_fig06_derived_stress_path_quantities,feature_sensitivity_sweeps.csv,Stress-path curves and derived slope/curvature quantities for fixed contexts.
-lit_fig09_prediction_performance_panels,prediction_exports.csv,Actual/predicted/error performance panels with error bars placed behind line plots.
-ours_vs_bb_full_shear_dilation,ours_vs_bb_full_curve_predictions.csv,"Two-row by three-column local direct-shear full-curve comparison: experiment, GeoSPIN, and C-BB."
+figure_03_prediction_and_error_field,counterfactual_feature_sweeps.csv; prediction_cases.csv,Predicted stress-path solution field and protocol-wise absolute-error field.
+figure_04_feature_response_maps,counterfactual_feature_sweeps.csv,Counterfactual response contours for major variables under fixed rock-joint contexts.
+figure_05_slope_and_curvature_maps,counterfactual_feature_sweeps.csv,Derivative and curvature maps from fixed-context counterfactual stress sweeps.
+figure_06_stress_path_profiles,counterfactual_feature_sweeps.csv,Stress-path curves and derived slope/curvature quantities for fixed contexts.
+figure_09_prediction_panels,prediction_cases.csv,Actual/predicted/error performance panels with error bars placed behind line plots.
+figure_10_curve_reconstruction,curve_reconstruction_predictions.csv,"Two-row by three-column local direct-shear full-curve comparison: experiment, GeoSPIN, and C-BB."

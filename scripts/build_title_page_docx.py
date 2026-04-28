@@ -13,13 +13,14 @@ import zipfile
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
-MANUSCRIPT_DIR = ROOT / "RockJointNet_TNNLS_manuscript"
-OUTPUT_DIR = ROOT / "RockJointNet_paper_figure_table_code" / "outputs"
+WORKSPACE_DIR = Path(__file__).resolve().parents[2]
+PROJECT_DIR = Path(__file__).resolve().parents[1]
+MANUSCRIPT_DIR = WORKSPACE_DIR / "RockJointNet_TNNLS_manuscript"
+OUTPUT_DIR = PROJECT_DIR / "outputs"
 
 DOCX_PATHS = [
-    MANUSCRIPT_DIR / "tnnls_title_page.docx",
-    OUTPUT_DIR / "tnnls_title_page.docx",
+    MANUSCRIPT_DIR / "title_page_tnnls.docx",
+    OUTPUT_DIR / "title_page_tnnls.docx",
 ]
 
 

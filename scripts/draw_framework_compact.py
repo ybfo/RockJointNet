@@ -176,14 +176,10 @@ def draw() -> None:
     arrow(ax, (0.735, 0.070), (0.810, 0.070), lw=0.9)
 
     for path in (
-        OUT / "geospin_framework_pinn_style_v2.png",
-        OUT / "geospin_framework_pinn_style_v2.pdf",
-        OUT / "geospin_framework_final.png",
-        OUT / "geospin_framework_final.pdf",
-        MANUSCRIPT_FIGURES / "geospin_framework_pinn_style_v2.png",
-        MANUSCRIPT_FIGURES / "geospin_framework_pinn_style_v2.pdf",
-        MANUSCRIPT_FIGURES / "geospin_framework_final.png",
-        MANUSCRIPT_FIGURES / "geospin_framework_final.pdf",
+        OUT / "framework_compact.png",
+        OUT / "framework_compact.pdf",
+        MANUSCRIPT_FIGURES / "framework_compact.png",
+        MANUSCRIPT_FIGURES / "framework_compact.pdf",
     ):
         fig.savefig(path, bbox_inches="tight", pad_inches=0.04)
     plt.close(fig)

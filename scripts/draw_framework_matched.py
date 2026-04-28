@@ -155,10 +155,10 @@ def draw() -> None:
     ax.text(0.62, 0.055, r"$\Theta=\{\phi,\theta,\psi,\omega\}$", fontsize=11, ha="center")
 
     for path in (
-        OUT / "geospin_framework_matched.png",
-        OUT / "geospin_framework_matched.pdf",
-        MANUSCRIPT_FIGURES / "geospin_framework_matched.png",
-        MANUSCRIPT_FIGURES / "geospin_framework_matched.pdf",
+        OUT / "framework_matched.png",
+        OUT / "framework_matched.pdf",
+        MANUSCRIPT_FIGURES / "framework_matched.png",
+        MANUSCRIPT_FIGURES / "framework_matched.pdf",
     ):
         fig.savefig(path, bbox_inches="tight", pad_inches=0.04)
     plt.close(fig)
@@ -166,4 +166,3 @@ def draw() -> None:
 
 if __name__ == "__main__":
     draw()
-

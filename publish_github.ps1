@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
-$Repo = "ybfo/RockJointNet_paper_figure_table_code"
-$Description = "Reproduction package for GeoSPIN rock-joint shear prediction paper figures, tables, checkpoints, and manuscript artifacts."
+$Repo = "ybfo/RockJointNet"
+$Description = "Benchmark, figure-generation, and manuscript artifacts for RockJointNet and related rock-joint shear-strength experiments."
 
 if (-not $env:GITHUB_TOKEN) {
     throw "Please set GITHUB_TOKEN to a GitHub PAT with repo scope before running this script."
