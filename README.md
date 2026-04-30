@@ -1,8 +1,8 @@
 # RockJointNet
 
-RockJointNet is the working repository for the rock-joint shear-strength study built around the GeoSPIN model family. This repo keeps the paper-facing assets in one place: benchmark summaries, figure scripts, table builders, cached predictions, manuscript drafts, and the small checkpoints needed for reproducibility checks.
+RockJointNet is the working repository for the rock-joint shear-strength study built around the GeoSPIN model family. This repo keeps the paper-facing assets in one place: benchmark summaries, figure scripts, table builders, cached predictions, and the small checkpoints needed for reproducibility checks.
 
-The current layout is meant for day-to-day research use rather than for a polished software release. The emphasis is on making the benchmark pipeline easy to rerun, the manuscript artifacts easy to trace back to source files, and the final figures and tables easy to update when experiments change.
+The current layout is meant for day-to-day research use rather than for a polished software release. The emphasis is on making the benchmark pipeline easy to rerun and the final figures and tables easy to update when experiments change.
 
 ## Quick start
 
@@ -35,7 +35,7 @@ RockJointNet/
 `-- source_inputs/
 ```
 
-`data/` stores the cached benchmark summaries, counterfactual sweep exports, local direct-shear curve caches, and manuscript-side table sources. `scripts/` contains the figure and table generators together with the manuscript-side helper scripts. `outputs/` holds the rendered result figures and result tables. `source_inputs/` keeps the original imported tables used to build the cleaned benchmark caches.
+`data/` stores the cached benchmark summaries, counterfactual sweep exports, local direct-shear curve caches, and table sources. `scripts/` contains the figure and table generators used by the rebuild step. `outputs/` holds the rendered result figures and result tables. `source_inputs/` keeps the original imported tables used to build the cleaned benchmark caches.
 
 ## Main generated files
 
