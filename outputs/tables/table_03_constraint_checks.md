@@ -1,6 +1,0 @@
-| Quantity checked           | Mathematical statement                                         | GeoSPIN enforcement          | Diagnostic                    |
-|:---------------------------|:---------------------------------------------------------------|:-----------------------------|:------------------------------|
-| Zero-stress boundary       | $\hat{\tau}_p(\sigma_n=0,c)=0$                                 | hard integral lower limit    | max mean error = 0.00e+00     |
-| Fixed-context monotonicity | $\partial \hat{\tau}_p/\partial s \ge 0$                       | softplus positive rate       | max violation = 0.00%         |
-| Nonnegative prediction     | $\hat{\tau}_p\ge0$                                             | integral of nonnegative rate | max negative rate = 0.00%     |
-| Trusted empirical prior    | $w_{BB}(\sigma_n,c)\mathcal{L}_{BB}$ only in low-stress region | trusted-region weighting     | not a global label constraint |

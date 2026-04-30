@@ -338,7 +338,6 @@ def main() -> None:
     fig06_derived_quantities(manifest)
     fig09_prediction_performance(manifest)
     fig_full_curve(manifest)
-    pd.DataFrame(manifest).to_csv(OUT / "figure_manifest.csv", index=False)
     print(f"Saved {len(manifest)} paper figures to {OUT}")
 
 

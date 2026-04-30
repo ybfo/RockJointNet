@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 
@@ -11,7 +10,6 @@ DATA = ROOT / "data"
 RECENT = DATA / "recent_methods"
 EXP = DATA / "experiment_results"
 LOCAL = DATA / "local_curve"
-MANUSCRIPT_TABLES = DATA / "manuscript_tables"
 OUT = ROOT / "outputs" / "tables"
 
 
@@ -27,17 +25,6 @@ def latex_escape(text: str) -> str:
 def save_table(df: pd.DataFrame, name: str, caption: str, label: str) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     df.to_csv(OUT / f"{name}.csv", index=False)
-    (OUT / f"{name}.md").write_text(df.to_markdown(index=False), encoding="utf-8")
-    tex = df.to_latex(
-        OUT / f"{name}.tex",
-        index=False,
-        escape=False,
-        float_format=lambda x: f"{x:.4f}",
-        caption=caption,
-        label=label,
-    )
-    if tex is None:
-        return
 
 
 def make_main_results() -> pd.DataFrame:
@@ -186,14 +173,6 @@ def make_inverse_table() -> pd.DataFrame:
     )
 
 
-def copy_manuscript_tables() -> None:
-    OUT.mkdir(parents=True, exist_ok=True)
-    for src in MANUSCRIPT_TABLES.glob("*"):
-        if src.is_file():
-            dst = OUT / f"manuscript_{src.name}" if not src.name.startswith("manuscript_") else OUT / src.name
-            dst.write_bytes(src.read_bytes())
-
-
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     save_table(
@@ -232,8 +211,7 @@ def main() -> None:
         "Synthetic inverse parameter recovery under observation noise.",
         "tab:inverse_recovery",
     )
-    copy_manuscript_tables()
-    print(f"Saved paper tables to {OUT}")
+    print(f"Saved result tables to {OUT}")
 
 
 if __name__ == "__main__":

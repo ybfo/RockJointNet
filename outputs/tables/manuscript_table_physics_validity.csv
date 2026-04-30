@@ -1,7 +1,0 @@
-dataset,model,fixed_context_monotonic_violation_rate_percent,negative_prediction_rate_percent,mean_tau0_boundary_error
-rockmb_2025_group_fold1,MonotonePeakNet,0.0,0.0,0.0
-rockmb_2025_group_fold1,PeriodicMonotone,0.0,0.0,0.0
-rockmb_2025_group_fold1,ResidualPeriodicMonotone,0.0,0.0,0.0
-g5_leave_JC_profile,MonotonePeakNet,0.0,0.0,0.0
-g5_leave_JC_profile,PeriodicMonotone,0.0,0.0,0.0
-g5_leave_JC_profile,ResidualPeriodicMonotone,0.0,0.0,0.0
